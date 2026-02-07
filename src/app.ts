@@ -23,10 +23,16 @@ const httpServer = createServer(app);
 // Middleware
 app.use(
   cors({
-    origin: env.FRONTEND_URL,
+    origin: [
+      "http://localhost:3000",
+      "https://rice-fe.vercel.app",
+      "https://rice-72wi.vercel.app",
+      /\.vercel\.app$/,
+    ],
     credentials: true,
   }),
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
