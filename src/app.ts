@@ -25,12 +25,11 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "https://rice-fe.vercel.app",
-      "https://rice-72wi.vercel.app",
-      /\.vercel\.app$/,
+      /^https:\/\/(.+\.)?vercel\.app$/,
+      /^https:\/\/(.+\.)?bluerabike\.com$/,
     ],
     credentials: true,
-  }),
+  })
 );
 
 app.use(express.json());
