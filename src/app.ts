@@ -4,7 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { env, connectDB } from "./config";
 import { errorHandler } from "./middlewares";
-import { socketService } from "./services";
+import { socketService } from "./services/socketService";
 
 // Import routes
 import { authRoutes } from "./modules/auth";
