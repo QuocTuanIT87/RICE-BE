@@ -4,7 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { env, connectDB } from "./config";
 import { errorHandler } from "./middlewares";
-import { socketService } from "./services";
+import { socketService } from "./services/socketService";
 
 // Import routes
 import { authRoutes } from "./modules/auth";
@@ -35,8 +35,14 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Khởi tạo Socket.io
-socketService.init(httpServer, env.FRONTEND_URL);
+// Khởi tạo Socket.io - dùng cùng CORS origins với Express
+const socketCorsOrigins: (string | RegExp)[] = [
+  "http://localhost:3000",
+  env.FRONTEND_URL,
+  /^https:\/\/(.+\.)?vercel\.app$/,
+  /^https:\/\/(.+\.)?bluerabike\.com$/,
+];
+socketService.init(httpServer, socketCorsOrigins);
 
 // Health check endpoint
 app.get("/api/health", (req: Request, res: Response) => {
