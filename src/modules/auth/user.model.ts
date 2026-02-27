@@ -25,14 +25,11 @@ const userSchema = new Schema<IUserDocument>(
       trim: true,
       match: [/^\S+@\S+\.\S+$/, "Email không hợp lệ"],
     },
-<<<<<<< HEAD
-=======
     phone: {
       type: String,
       trim: true,
       default: "",
     },
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     password: {
       type: String,
       required: [true, "Mật khẩu là bắt buộc"],

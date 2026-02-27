@@ -18,14 +18,11 @@ export const Errors = {
     "Email hoặc mật khẩu không đúng",
     401,
   ),
-<<<<<<< HEAD
-=======
   INVALID_PASSWORD: new ServiceError(
     "INVALID_PASSWORD",
     "Mật khẩu hiện tại không đúng",
     400,
   ),
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   USER_NOT_FOUND: new ServiceError(
     "USER_NOT_FOUND",
     "Không tìm thấy người dùng",

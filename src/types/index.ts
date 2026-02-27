@@ -13,10 +13,7 @@ export interface IUser {
   name: string;
   email: string;
   password: string;
-<<<<<<< HEAD
-=======
   phone?: string; // Số điện thoại (tùy chọn)
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   role: UserRole;
   isVerified: boolean; // Đã xác thực email chưa
   isBlocked: boolean; // Bị khóa tài khoản không

@@ -2,10 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { MealPackage } from "./mealPackage.model";
 import { ServiceError } from "../../middlewares";
-<<<<<<< HEAD
-=======
 import { socketService } from "../../services";
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 
 /**
  * GET /api/meal-packages
@@ -91,12 +88,9 @@ export const createMealPackage = async (
       message: "Tạo gói đặt cơm thành công!",
       data: pkg,
     });
-<<<<<<< HEAD
-=======
 
     // Thông báo real-time cho tất cả client
     socketService.emitAll("package_created", { packageId: pkg._id });
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   } catch (error) {
     next(error);
   }
@@ -133,12 +127,9 @@ export const updateMealPackage = async (
       message: "Cập nhật gói đặt cơm thành công!",
       data: pkg,
     });
-<<<<<<< HEAD
-=======
 
     // Thông báo real-time cho tất cả client
     socketService.emitAll("package_updated", { packageId: pkg._id });
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   } catch (error) {
     next(error);
   }
@@ -168,12 +159,9 @@ export const deleteMealPackage = async (
       success: true,
       message: "Xóa gói đặt cơm thành công!",
     });
-<<<<<<< HEAD
-=======
 
     // Thông báo real-time cho tất cả client
     socketService.emitAll("package_deleted", { packageId: req.params.id });
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   } catch (error) {
     next(error);
   }

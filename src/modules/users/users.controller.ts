@@ -2,10 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { User } from "../auth/user.model";
 import { UserPackage } from "../userPackages/userPackage.model";
-<<<<<<< HEAD
-=======
 import { Order } from "../orders/order.model";
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 import { ServiceError } from "../../middlewares";
 
 /**
@@ -72,8 +69,6 @@ export const getUserById = async (
       .populate("mealPackageId")
       .sort({ purchasedAt: -1 });
 
-<<<<<<< HEAD
-=======
     // Lấy danh sách đơn hàng đã đặt
     const orders = await Order.find({ userId: user._id })
       .populate("dailyMenuId")
@@ -84,16 +79,12 @@ export const getUserById = async (
       .sort({ orderedAt: -1 })
       .limit(50);
 
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     res.json({
       success: true,
       data: {
         user,
         packages,
-<<<<<<< HEAD
-=======
         orders,
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
       },
     });
   } catch (error) {
@@ -175,8 +166,6 @@ export const unblockUser = async (
     next(error);
   }
 };
-<<<<<<< HEAD
-=======
 
 /**
  * PATCH /api/users/:id/reset-password
@@ -219,4 +208,3 @@ export const resetUserPassword = async (
     next(error);
   }
 };
->>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
