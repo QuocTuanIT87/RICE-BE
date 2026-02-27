@@ -9,6 +9,7 @@ import {
   getEndOfDay,
   isWithinTimeRange,
 } from "../../utils";
+import { socketService } from "../../services";
 
 /**
  * GET /api/daily-menus
@@ -169,6 +170,12 @@ export const createDailyMenu = async (
       })),
     );
 
+    // Thông báo cho mọi người có menu mới
+    socketService.emitAll("menu_created", {
+      menuId: menu._id,
+      menuDate: menu.menuDate,
+    });
+
     res.status(201).json({
       success: true,
       message: "Tạo menu thành công!",
@@ -205,22 +212,47 @@ export const updateDailyMenu = async (
     if (endAt) menu.endAt = endAt;
     if (isLocked !== undefined) menu.isLocked = isLocked;
 
-    // Nếu có rawContent mới, xóa món cũ và tạo món mới
+    // Nếu có rawContent mới, cập nhật danh sách món ăn một cách thông minh
     if (rawContent && rawContent !== menu.rawContent) {
+      const oldRawContent = menu.rawContent;
       menu.rawContent = rawContent;
 
-      // Xóa món ăn cũ
-      await MenuItem.deleteMany({ dailyMenuId: menu._id });
+      // Lấy danh sách món cũ hiện có trong DB
+      const existingItems = await MenuItem.find({ dailyMenuId: menu._id });
 
-      // Tạo món ăn mới
-      const items = parseMenuText(rawContent);
-      await MenuItem.insertMany(
-        items.map((item) => ({
-          dailyMenuId: menu._id,
-          name: item.name,
-          category: item.category,
-        })),
-      );
+      // Parse nội dung mới
+      const newParsedItems = parseMenuText(rawContent);
+
+      // Danh sách ID món ăn mới cho menu
+      const newMenuItemIds = [];
+
+      // Xử lý từng món trong nội dung mới
+      for (const newItem of newParsedItems) {
+        // Tìm xem món này đã có trong DB chưa (dựa vào tên)
+        const oldItem = existingItems.find(item => item.name === newItem.name);
+
+        if (oldItem) {
+          // Nếu đã có, cập nhật category nếu thay đổi và giữ nguyên ID
+          if (oldItem.category !== newItem.category) {
+            oldItem.category = newItem.category as any;
+            await oldItem.save();
+          }
+          newMenuItemIds.push(oldItem._id);
+        } else {
+          // Nếu chưa có, tạo món mới
+          const createdItem = await MenuItem.create({
+            dailyMenuId: menu._id,
+            name: newItem.name,
+            category: newItem.category as any
+          });
+          newMenuItemIds.push(createdItem._id);
+        }
+      }
+
+      // Cập nhật mảng menuItems trong DailyMenu (chỉ giữ lại những món xuất hiện trong text mới)
+      // Lưu ý: Các món cũ không còn trong text mới vẫn tồn tại trong DB để tránh hỏng Order cũ, 
+      // nhưng DailyMenu sẽ không trỏ tới chúng nữa.
+      (menu as any).menuItems = newMenuItemIds;
     }
 
     await menu.save();
@@ -228,6 +260,12 @@ export const updateDailyMenu = async (
     const updatedMenu = await DailyMenu.findById(menu._id).populate(
       "menuItems",
     );
+
+    // Thông báo cho mọi người menu đã cập nhật
+    socketService.emitAll("menu_updated", {
+      menuId: menu._id,
+      isLocked: menu.isLocked,
+    });
 
     res.json({
       success: true,
@@ -259,6 +297,12 @@ export const lockMenu = async (
       throw new ServiceError("MENU_NOT_FOUND", "Không tìm thấy menu", 404);
     }
 
+    // Thông báo cho mọi người
+    socketService.emitAll("menu_locked", {
+      menuId: menu._id,
+      message: "Menu đã được khóa.",
+    });
+
     res.json({
       success: true,
       message: "Đã khóa menu!",
@@ -288,6 +332,12 @@ export const unlockMenu = async (
     if (!menu) {
       throw new ServiceError("MENU_NOT_FOUND", "Không tìm thấy menu", 404);
     }
+
+    // Thông báo cho mọi người
+    socketService.emitAll("menu_unlocked", {
+      menuId: menu._id,
+      message: "Menu đã được mở khóa!",
+    });
 
     res.json({
       success: true,

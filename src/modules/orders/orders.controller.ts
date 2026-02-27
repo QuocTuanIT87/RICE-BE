@@ -8,6 +8,7 @@ import { UserPackage } from "../userPackages/userPackage.model";
 import { User } from "../auth/user.model";
 import { ServiceError } from "../../middlewares";
 import { getStartOfDay, getEndOfDay, isWithinTimeRange } from "../../utils";
+import { socketService } from "../../services";
 
 /**
  * GET /api/orders/my
@@ -105,13 +106,26 @@ export const createOrder = async (
       );
     }
 
-    // Tìm menu hôm nay
+    // Nhận menuId từ frontend - cho phép đặt đúng menu user đã chọn
+    const { menuId } = req.body;
+
+    // Nếu có menuId, dùng nó; nếu không thì tìm menu đầu tiên hôm nay (fallback)
     const startOfDay = getStartOfDay();
     const endOfDay = getEndOfDay();
 
-    const menu = await DailyMenu.findOne({
-      menuDate: { $gte: startOfDay, $lte: endOfDay },
-    });
+    let menu;
+    if (menuId) {
+      menu = await DailyMenu.findById(menuId);
+      if (!menu) {
+        throw new ServiceError("MENU_NOT_FOUND", "Không tìm thấy menu", 404);
+      }
+    } else {
+      // Fallback: tìm menu đầu tiên chưa khóa hôm nay
+      menu = await DailyMenu.findOne({
+        menuDate: { $gte: startOfDay, $lte: endOfDay },
+        isLocked: false,
+      });
+    }
 
     if (!menu) {
       throw new ServiceError("MENU_NOT_FOUND", "Chưa có menu hôm nay", 404);
@@ -193,19 +207,24 @@ export const createOrder = async (
         message: "Đã cập nhật đơn đặt cơm!",
         data: updatedOrder,
       });
+
+      // Thông báo cho Admin
+      socketService.emitToAdmin("order_updated", {
+        orderId: existingOrder._id,
+        menuId: menu._id,
+      });
       return;
     }
 
-    // Tạo order mới
+    // Tạo đơn hàng mới
     const order = new Order({
       userId,
       dailyMenuId: menu._id,
       userPackageId: userPackage._id,
-      orderType, // Lưu loại đặt cơm
+      orderType: orderType as any,
       isConfirmed: false,
       orderedAt: new Date(),
     });
-
     await order.save();
 
     // Tạo các order items với ghi chú
@@ -229,6 +248,12 @@ export const createOrder = async (
       success: true,
       message: "Đặt cơm thành công!",
       data: createdOrder,
+    });
+
+    // Thông báo cho Admin
+    socketService.emitToAdmin("order_created", {
+      orderId: order._id,
+      menuId: menu._id,
     });
   } catch (error) {
     next(error);
@@ -282,6 +307,7 @@ export const getOrdersByDate = async (
       const orderItems = (order as any).orderItems || [];
       for (const item of orderItems) {
         const menuItem = item.menuItemId as any;
+        if (!menuItem) continue;
         const itemId = menuItem._id.toString();
         if (!itemSummary[itemId]) {
           itemSummary[itemId] = { name: menuItem.name, count: 0 };
@@ -357,11 +383,22 @@ export const confirmAllOrders = async (
         userPackage.isActive = false;
         await userPackage.save();
       }
+
+      // Thông báo cho từng user (optional but nice)
+      socketService.emitToUser(order.userId.toString(), "order_confirmed", {
+        orderId: order._id,
+        menuId: menuId,
+      });
     }
 
-    // Khóa menu
+    // Khóa menu và thông báo cho mọi người
     menu.isLocked = true;
     await menu.save();
+
+    socketService.emitAll("menu_locked", {
+      menuId: menuId,
+      message: "Menu hôm nay đã chính thức đóng. Chúc các bạn ngon miệng!",
+    });
 
     res.json({
       success: true,

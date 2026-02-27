@@ -1,8 +1,10 @@
 // Express App - Entry point
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
+import { createServer } from "http";
 import { env, connectDB } from "./config";
 import { errorHandler } from "./middlewares";
+import { socketService } from "./services";
 
 // Import routes
 import { authRoutes } from "./modules/auth";
@@ -16,22 +18,25 @@ import { statisticsRoutes } from "./modules/statistics";
 
 // Tạo app Express
 const app: Application = express();
+const httpServer = createServer(app);
 
 // Middleware
 app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "http://localhost:3001",
-      "https://rice-fe.vercel.app",
-      "https://rice-72wi.vercel.app",
-      /\.vercel\.app$/,
+      /^https:\/\/(.+\.)?vercel\.app$/,
+      /^https:\/\/(.+\.)?bluerabike\.com$/,
     ],
     credentials: true,
-  }),
+  })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Khởi tạo Socket.io
+socketService.init(httpServer, env.FRONTEND_URL);
 
 // Health check endpoint
 app.get("/api/health", (req: Request, res: Response) => {
@@ -40,7 +45,7 @@ app.get("/api/health", (req: Request, res: Response) => {
     status: "OK",
     timestamp: new Date(),
     environment: env.NODE_ENV,
-    message: "🍚 Web Đặt Cơm API đang hoạt động!",
+    message: "🍚 Web Đặt Cơm API đang hoạt động thời gian thực!",
   });
 });
 
@@ -74,14 +79,15 @@ const startServer = async () => {
     // Kết nối database
     await connectDB();
 
-    // Start server
-    app.listen(env.PORT, () => {
+    // Start server bằng httpServer để hỗ trợ Socket.io
+    httpServer.listen(env.PORT, () => {
       console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║                 🍚 WEB ĐẶT CƠM API 🍚                    ║
 ╠══════════════════════════════════════════════════════════╣
 ║  Server đang chạy tại: http://localhost:${env.PORT}           ║
 ║  Environment: ${env.NODE_ENV.padEnd(42)}║
+║  Socket.io: Enabled                                      ║
 ╚══════════════════════════════════════════════════════════╝
       `);
     });

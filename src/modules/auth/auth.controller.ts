@@ -17,8 +17,12 @@ const createToken = (user: IUserDocument): string => {
     email: user.email,
     role: user.role,
   };
+<<<<<<< HEAD
   const options: jwt.SignOptions = { expiresIn: env.JWT_EXPIRES_IN };
   return jwt.sign(payload, env.JWT_SECRET, options);
+=======
+  return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] });
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 };
 
 /**
@@ -43,18 +47,27 @@ export const register = async (
     const otpCode = generateOTP();
     const otpExpiry = getOTPExpiry(10); // 10 phút
 
+<<<<<<< HEAD
     // Tạo user mới - AUTO VERIFY vì Render chặn SMTP
+=======
+    // Tạo user mới (chưa verified)
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     const user = new User({
       name,
       email,
       password,
       otpCode,
       otpExpiry,
+<<<<<<< HEAD
       isVerified: true, // Auto verify vì không gửi được email trên Render
+=======
+      isVerified: false,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     });
 
     await user.save();
 
+<<<<<<< HEAD
     // Thử gửi OTP qua email (không block nếu fail)
     sendOTPEmail(email, otpCode, name).catch((err) => {
       console.log(
@@ -78,6 +91,17 @@ export const register = async (
           role: user.role,
           isVerified: user.isVerified,
         },
+=======
+    // Gửi OTP qua email
+    await sendOTPEmail(email, otpCode, name);
+
+    res.status(201).json({
+      success: true,
+      message: "Đăng ký thành công! Vui lòng kiểm tra email để nhận mã OTP.",
+      data: {
+        email: user.email,
+        requiresOTP: true,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
       },
     });
   } catch (error) {
@@ -262,6 +286,10 @@ export const getMe = async (
         id: user._id,
         name: user.name,
         email: user.email,
+<<<<<<< HEAD
+=======
+        phone: user.phone,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
         role: user.role,
         isVerified: user.isVerified,
         activePackage: user.activePackageId,
@@ -271,3 +299,83 @@ export const getMe = async (
     next(error);
   }
 };
+<<<<<<< HEAD
+=======
+
+/**
+ * PATCH /api/auth/profile
+ * Cập nhật thông tin cá nhân
+ */
+export const updateProfile = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { name, phone } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw Errors.USER_NOT_FOUND;
+    }
+
+    if (name) user.name = name;
+    if (phone !== undefined) user.phone = phone;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Cập nhật thông tin cá nhân thành công!",
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/auth/change-password
+ * Đổi mật khẩu
+ */
+export const changePassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    const { oldPassword, newPassword } = req.body;
+
+    // Lấy user kèm mật khẩu để so sánh
+    const user = await User.findById(userId).select("+password");
+    if (!user) {
+      throw Errors.USER_NOT_FOUND;
+    }
+
+    // Kiểm tra mật khẩu cũ
+    const isMatch = await user.comparePassword(oldPassword);
+    if (!isMatch) {
+      throw Errors.INVALID_PASSWORD;
+    }
+
+    // Cập nhật mật khẩu mới (Schema pre-save sẽ tự hash)
+    user.password = newPassword;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Đổi mật khẩu thành công!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9

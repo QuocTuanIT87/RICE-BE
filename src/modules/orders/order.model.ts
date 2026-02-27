@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 import { IOrder } from "../../types";
 
 // Extend IOrder với Document
-export interface IOrderDocument extends IOrder, Document {}
+export interface IOrderDocument extends IOrder, Document { }
 
 // Schema definition
 const orderSchema = new Schema<IOrderDocument>(

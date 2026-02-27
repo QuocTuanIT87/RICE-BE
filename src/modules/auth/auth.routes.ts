@@ -13,5 +13,10 @@ router.post("/login", authController.login);
 
 // Protected routes (cần đăng nhập)
 router.get("/me", auth, authController.getMe);
+<<<<<<< HEAD
+=======
+router.patch("/profile", auth, authController.updateProfile);
+router.patch("/change-password", auth, authController.changePassword);
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 
 export default router;

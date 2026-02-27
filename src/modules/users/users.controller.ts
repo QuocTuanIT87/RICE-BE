@@ -2,6 +2,10 @@
 import { Request, Response, NextFunction } from "express";
 import { User } from "../auth/user.model";
 import { UserPackage } from "../userPackages/userPackage.model";
+<<<<<<< HEAD
+=======
+import { Order } from "../orders/order.model";
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 import { ServiceError } from "../../middlewares";
 
 /**
@@ -68,11 +72,28 @@ export const getUserById = async (
       .populate("mealPackageId")
       .sort({ purchasedAt: -1 });
 
+<<<<<<< HEAD
+=======
+    // Lấy danh sách đơn hàng đã đặt
+    const orders = await Order.find({ userId: user._id })
+      .populate("dailyMenuId")
+      .populate({
+        path: "orderItems",
+        populate: { path: "menuItemId" },
+      })
+      .sort({ orderedAt: -1 })
+      .limit(50);
+
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     res.json({
       success: true,
       data: {
         user,
         packages,
+<<<<<<< HEAD
+=======
+        orders,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
       },
     });
   } catch (error) {
@@ -154,3 +175,48 @@ export const unblockUser = async (
     next(error);
   }
 };
+<<<<<<< HEAD
+=======
+
+/**
+ * PATCH /api/users/:id/reset-password
+ * Reset mật khẩu user về 123456 (Admin)
+ */
+export const resetUserPassword = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const user = await User.findById(req.params.id).select("+password");
+
+    if (!user) {
+      throw new ServiceError(
+        "USER_NOT_FOUND",
+        "Không tìm thấy người dùng",
+        404,
+      );
+    }
+
+    // Không cho reset admin
+    if (user.role === "admin") {
+      throw new ServiceError(
+        "CANNOT_RESET_ADMIN",
+        "Không thể reset mật khẩu tài khoản admin",
+        400,
+      );
+    }
+
+    // Set password về 123456 (pre-save hook sẽ tự hash)
+    user.password = "123456";
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `Đã reset mật khẩu của ${user.email} về 123456`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9

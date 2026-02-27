@@ -78,6 +78,7 @@ export const parseTimeString = (
 };
 
 /**
+<<<<<<< HEAD
  * Lấy thời gian hiện tại theo múi giờ Việt Nam (GMT+7)
  */
 export const getVietnamTime = (): Date => {
@@ -121,6 +122,14 @@ export const isWithinTimeRange = (beginAt: string, endAt: string): boolean => {
   );
   console.log("[TimeCheck] Is within range:", now >= begin && now <= end);
 
+=======
+ * Kiểm tra thời gian hiện tại có nằm trong khoảng cho phép không
+ */
+export const isWithinTimeRange = (beginAt: string, endAt: string): boolean => {
+  const now = new Date();
+  const begin = parseTimeString(beginAt);
+  const end = parseTimeString(endAt);
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   return now >= begin && now <= end;
 };
 

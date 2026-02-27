@@ -5,7 +5,11 @@ import { MealPackage } from "../mealPackages/mealPackage.model";
 import { UserPackage } from "../userPackages/userPackage.model";
 import { User } from "../auth/user.model";
 import { ServiceError } from "../../middlewares";
+<<<<<<< HEAD
 import { sendPackagePurchaseSuccessEmail } from "../../services";
+=======
+import { sendPackagePurchaseSuccessEmail, socketService } from "../../services";
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 
 /**
  * GET /api/package-purchases
@@ -109,6 +113,17 @@ export const createPurchaseRequest = async (
 
     await request.save();
 
+<<<<<<< HEAD
+=======
+    // Thông báo cho Admin có yêu cầu mới
+    socketService.emitToAdmin("purchase_request_created", {
+      requestId: request._id,
+      userId: request.userId,
+      mealPackageId: request.mealPackageId,
+      status: request.status,
+    });
+
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     res.status(201).json({
       success: true,
       message:
@@ -193,6 +208,16 @@ export const approvePurchaseRequest = async (
       new Date(),
     );
 
+<<<<<<< HEAD
+=======
+    // Thông báo cho User biết yêu cầu đã được duyệt
+    socketService.emitToUser(user._id.toString(), "purchase_request_approved", {
+      requestId: request._id,
+      status: "approved",
+      message: `Gói "${pkg.name}" của bạn đã được kích hoạt!`,
+    });
+
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     res.json({
       success: true,
       message: `Đã xác nhận mua gói "${pkg.name}" cho ${user.name}`,
@@ -236,6 +261,16 @@ export const rejectPurchaseRequest = async (
     request.processedBy = req.user!.userId as any;
     await request.save();
 
+<<<<<<< HEAD
+=======
+    // Thông báo cho User biết yêu cầu bị từ chối
+    socketService.emitToUser(request.userId.toString(), "purchase_request_rejected", {
+      requestId: request._id,
+      status: "rejected",
+      message: "Yêu cầu mua gói của bạn đã bị từ chối.",
+    });
+
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     res.json({
       success: true,
       message: "Đã từ chối yêu cầu mua gói",
