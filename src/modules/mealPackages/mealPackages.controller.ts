@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { MealPackage } from "./mealPackage.model";
 import { ServiceError } from "../../middlewares";
+import { socketService } from "../../services";
 
 /**
  * GET /api/meal-packages
@@ -87,6 +88,9 @@ export const createMealPackage = async (
       message: "Tạo gói đặt cơm thành công!",
       data: pkg,
     });
+
+    // Thông báo real-time cho tất cả client
+    socketService.emitAll("package_created", { packageId: pkg._id });
   } catch (error) {
     next(error);
   }
@@ -123,6 +127,9 @@ export const updateMealPackage = async (
       message: "Cập nhật gói đặt cơm thành công!",
       data: pkg,
     });
+
+    // Thông báo real-time cho tất cả client
+    socketService.emitAll("package_updated", { packageId: pkg._id });
   } catch (error) {
     next(error);
   }
@@ -152,6 +159,9 @@ export const deleteMealPackage = async (
       success: true,
       message: "Xóa gói đặt cơm thành công!",
     });
+
+    // Thông báo real-time cho tất cả client
+    socketService.emitAll("package_deleted", { packageId: req.params.id });
   } catch (error) {
     next(error);
   }

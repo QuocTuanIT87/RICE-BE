@@ -12,5 +12,6 @@ router.get("/", usersController.getUsers);
 router.get("/:id", usersController.getUserById);
 router.patch("/:id/block", usersController.blockUser);
 router.patch("/:id/unblock", usersController.unblockUser);
+router.patch("/:id/reset-password", usersController.resetUserPassword);
 
 export default router;
