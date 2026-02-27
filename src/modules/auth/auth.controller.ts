@@ -17,7 +17,12 @@ const createToken = (user: IUserDocument): string => {
     email: user.email,
     role: user.role,
   };
+<<<<<<< HEAD
+  const options: jwt.SignOptions = { expiresIn: env.JWT_EXPIRES_IN };
+  return jwt.sign(payload, env.JWT_SECRET, options);
+=======
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] });
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
 };
 
 /**
@@ -42,18 +47,51 @@ export const register = async (
     const otpCode = generateOTP();
     const otpExpiry = getOTPExpiry(10); // 10 phút
 
+<<<<<<< HEAD
+    // Tạo user mới - AUTO VERIFY vì Render chặn SMTP
+=======
     // Tạo user mới (chưa verified)
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     const user = new User({
       name,
       email,
       password,
       otpCode,
       otpExpiry,
+<<<<<<< HEAD
+      isVerified: true, // Auto verify vì không gửi được email trên Render
+=======
       isVerified: false,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
     });
 
     await user.save();
 
+<<<<<<< HEAD
+    // Thử gửi OTP qua email (không block nếu fail)
+    sendOTPEmail(email, otpCode, name).catch((err) => {
+      console.log(
+        "⚠️ Không gửi được email OTP (Render chặn SMTP):",
+        err.message,
+      );
+    });
+
+    // Tạo token luôn để user có thể đăng nhập ngay
+    const token = createToken(user as IUserDocument);
+
+    res.status(201).json({
+      success: true,
+      message: "Đăng ký thành công! Bạn có thể đăng nhập ngay.",
+      data: {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isVerified: user.isVerified,
+        },
+=======
     // Gửi OTP qua email
     await sendOTPEmail(email, otpCode, name);
 
@@ -63,6 +101,7 @@ export const register = async (
       data: {
         email: user.email,
         requiresOTP: true,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
       },
     });
   } catch (error) {
@@ -247,7 +286,10 @@ export const getMe = async (
         id: user._id,
         name: user.name,
         email: user.email,
+<<<<<<< HEAD
+=======
         phone: user.phone,
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
         role: user.role,
         isVerified: user.isVerified,
         activePackage: user.activePackageId,
@@ -257,6 +299,8 @@ export const getMe = async (
     next(error);
   }
 };
+<<<<<<< HEAD
+=======
 
 /**
  * PATCH /api/auth/profile
@@ -334,3 +378,4 @@ export const changePassword = async (
     next(error);
   }
 };
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9

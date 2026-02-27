@@ -78,12 +78,58 @@ export const parseTimeString = (
 };
 
 /**
+<<<<<<< HEAD
+ * Lấy thời gian hiện tại theo múi giờ Việt Nam (GMT+7)
+ */
+export const getVietnamTime = (): Date => {
+  const now = new Date();
+  // Chuyển đổi sang múi giờ Việt Nam (UTC+7)
+  const vietnamOffset = 7 * 60; // 7 giờ tính bằng phút
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  return new Date(utc + vietnamOffset * 60000);
+};
+
+/**
+ * Parse chuỗi thời gian HH:mm thành Date object theo múi giờ Việt Nam
+ */
+export const parseTimeStringVN = (
+  timeStr: string,
+  baseDate: Date = getVietnamTime(),
+): Date => {
+  const [hours, minutes] = timeStr.split(":").map(Number);
+  const result = new Date(baseDate);
+  result.setHours(hours, minutes, 0, 0);
+  return result;
+};
+
+/**
+ * Kiểm tra thời gian hiện tại có nằm trong khoảng cho phép không
+ * Sử dụng múi giờ Việt Nam (GMT+7) để đảm bảo hoạt động đúng trên mọi server
+ */
+export const isWithinTimeRange = (beginAt: string, endAt: string): boolean => {
+  const now = getVietnamTime();
+  const begin = parseTimeStringVN(beginAt, now);
+  const end = parseTimeStringVN(endAt, now);
+
+  // Debug log
+  console.log("[TimeCheck] Server time:", new Date().toISOString());
+  console.log("[TimeCheck] Vietnam time:", now.toISOString());
+  console.log(
+    "[TimeCheck] Begin:",
+    begin.toISOString(),
+    "End:",
+    end.toISOString(),
+  );
+  console.log("[TimeCheck] Is within range:", now >= begin && now <= end);
+
+=======
  * Kiểm tra thời gian hiện tại có nằm trong khoảng cho phép không
  */
 export const isWithinTimeRange = (beginAt: string, endAt: string): boolean => {
   const now = new Date();
   const begin = parseTimeString(beginAt);
   const end = parseTimeString(endAt);
+>>>>>>> 88316e3796a554084c42223fe02bd664f932e5f9
   return now >= begin && now <= end;
 };
 
