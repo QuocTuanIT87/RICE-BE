@@ -25,7 +25,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3000",
-      "http://103.166.184.174:5000",
+      env.FRONTEND_URL,
       /^https:\/\/(.+\.)?vercel\.app$/,
       /^https:\/\/(.+\.)?bluerabike\.com$/,
     ],
