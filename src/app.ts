@@ -86,7 +86,7 @@ const startServer = async () => {
     await connectDB();
 
     // Start server bằng httpServer để hỗ trợ Socket.io
-    httpServer.listen(env.PORT, () => {
+    httpServer.listen(env.PORT, "0.0.0.0", () => {
       console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║                 🍚 WEB ĐẶT CƠM API 🍚                    ║
