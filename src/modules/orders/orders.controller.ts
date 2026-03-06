@@ -142,14 +142,33 @@ export const createOrder = async (
       throw new ServiceError("MENU_LOCKED", message, 400);
     }
 
-    // Tìm gói phù hợp với orderType (bình thường hoặc không cơm)
-    const userPackage = await UserPackage.findOne({
-      userId,
-      packageType: orderType,
-      isActive: true,
-      remainingTurns: { $gt: 0 },
-      expiresAt: { $gt: new Date() },
-    }).sort({ expiresAt: 1 }); // Ưu tiên gói sắp hết hạn trước
+    // Lấy thông tin user để xem gói mặc định (activePackageId)
+    const user = await User.findById(userId).select("activePackageId");
+
+    let userPackage = null;
+
+    // 1. Thử dùng gói mặc định nếu có và hợp lệ
+    if (user?.activePackageId) {
+      userPackage = await UserPackage.findOne({
+        _id: user.activePackageId,
+        userId,
+        packageType: { $in: [orderType, "coin-exchange"] },
+        isActive: true,
+        remainingTurns: { $gt: 0 },
+        expiresAt: { $gt: new Date() },
+      });
+    }
+
+    // 2. Nếu không có gói mặc định hoặc gói mặc định không hợp lệ, tìm gói cũ nhất sắp hết hạn
+    if (!userPackage) {
+      userPackage = await UserPackage.findOne({
+        userId,
+        packageType: { $in: [orderType, "coin-exchange"] },
+        isActive: true,
+        remainingTurns: { $gt: 0 },
+        expiresAt: { $gt: new Date() },
+      }).sort({ expiresAt: 1 });
+    }
 
     if (!userPackage) {
       const packageLabel =
@@ -382,6 +401,13 @@ export const confirmAllOrders = async (
       if (userPackage && userPackage.remainingTurns <= 0) {
         userPackage.isActive = false;
         await userPackage.save();
+
+        // Nếu đây là gói mặc định của user, xóa nó đi để fallback về gói khác
+        const userWithPkg = await User.findById(order.userId).select("activePackageId");
+        if (userWithPkg && userWithPkg.activePackageId?.toString() === userPackage._id.toString()) {
+          userWithPkg.activePackageId = undefined;
+          await userWithPkg.save();
+        }
       }
 
       // Thông báo cho từng user (optional but nice)

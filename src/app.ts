@@ -1,6 +1,7 @@
 // Express App - Entry point
 import express, { Application, Request, Response } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import { env, connectDB } from "./config";
 import { errorHandler } from "./middlewares";
@@ -15,6 +16,7 @@ import { userPackagesRoutes } from "./modules/userPackages";
 import { dailyMenusRoutes } from "./modules/dailyMenus";
 import { ordersRoutes } from "./modules/orders";
 import { statisticsRoutes } from "./modules/statistics";
+import { gameCoinsRoutes } from "./modules/gameCoins";
 
 // Tạo app Express
 const app: Application = express();
@@ -32,6 +34,7 @@ app.use(
   })
 );
 
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -64,6 +67,7 @@ app.use("/api/user-packages", userPackagesRoutes);
 app.use("/api/daily-menus", dailyMenusRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/statistics", statisticsRoutes);
+app.use("/api/game-coins", gameCoinsRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

@@ -21,6 +21,16 @@ const createToken = (user: IUserDocument): string => {
 };
 
 /**
+ * Cookie options - Bảo mật và sống 7 ngày
+ */
+const COOKIE_OPTIONS = {
+  httpOnly: true, // Không cho JS truy cập
+  secure: env.NODE_ENV === "production", // Chỉ gửi qua HTTPS trong prod
+  sameSite: (env.NODE_ENV === "production" ? "none" : "lax") as any, // Cross-site support if needed
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+};
+
+/**
  * POST /api/auth/register
  * Đăng ký tài khoản mới
  */
@@ -107,6 +117,9 @@ export const verifyOTP = async (
     // Tạo token
     const token = createToken(user);
 
+    // Set cookie
+    res.cookie("token", token, COOKIE_OPTIONS);
+
     res.json({
       success: true,
       message: "Xác thực tài khoản thành công!",
@@ -117,6 +130,7 @@ export const verifyOTP = async (
           name: user.name,
           email: user.email,
           role: user.role,
+          gameCoins: user.gameCoins,
         },
       },
     });
@@ -207,6 +221,9 @@ export const login = async (
     // Tạo token
     const token = createToken(user);
 
+    // Set cookie
+    res.cookie("token", token, COOKIE_OPTIONS);
+
     res.json({
       success: true,
       message: "Đăng nhập thành công! Chào mừng đến với Web Đặt Cơm! 🍚",
@@ -217,6 +234,7 @@ export const login = async (
           name: user.name,
           email: user.email,
           role: user.role,
+          gameCoins: user.gameCoins,
         },
       },
     });
@@ -250,6 +268,7 @@ export const getMe = async (
         phone: user.phone,
         role: user.role,
         isVerified: user.isVerified,
+        gameCoins: user.gameCoins,
         activePackage: user.activePackageId,
       },
     });
@@ -329,6 +348,26 @@ export const changePassword = async (
     res.json({
       success: true,
       message: "Đổi mật khẩu thành công!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/auth/logout
+ * Đăng xuất - Xóa cookie
+ */
+export const logout = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    res.clearCookie("token", COOKIE_OPTIONS);
+    res.json({
+      success: true,
+      message: "Đăng xuất thành công!",
     });
   } catch (error) {
     next(error);

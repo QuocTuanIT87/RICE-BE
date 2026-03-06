@@ -20,6 +20,7 @@ export interface IUser {
   otpCode?: string; // Mã OTP tạm thời
   otpExpiry?: Date; // Thời gian hết hạn OTP
   activePackageId?: Types.ObjectId; // Gói đặt cơm đang sử dụng
+  gameCoins: number; // Xu chơi game giải trí
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -41,7 +42,7 @@ export interface AuthRequest extends Request {
 // =============================================
 
 // Loại gói đặt cơm: bình thường (có cơm) hoặc không cơm
-export type PackageType = "normal" | "no-rice";
+export type PackageType = "normal" | "no-rice" | "coin-exchange";
 
 // Interface cho gói đặt cơm (do admin tạo)
 export interface IMealPackage {
@@ -51,6 +52,8 @@ export interface IMealPackage {
   validDays: number; // Số ngày hiệu lực
   packageType: PackageType; // Loại gói: bình thường hoặc không cơm
   qrCodeImage?: string; // URL ảnh QR thanh toán
+  bonusCoins?: number; // Xu bonus khi mua gói
+  coinPrice?: number; // Giá đổi bằng xu (nếu có)
   isActive: boolean; // Còn bán không
   createdAt?: Date;
   updatedAt?: Date;

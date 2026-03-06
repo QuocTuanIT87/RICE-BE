@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 import { IMealPackage } from "../../types";
 
 // Extend IMealPackage với Document
-export interface IMealPackageDocument extends IMealPackage, Document {}
+export interface IMealPackageDocument extends IMealPackage, Document { }
 
 // Schema definition
 const mealPackageSchema = new Schema<IMealPackageDocument>(
@@ -34,9 +34,17 @@ const mealPackageSchema = new Schema<IMealPackageDocument>(
       type: String,
       default: "",
     },
+    bonusCoins: {
+      type: Number,
+      default: 0, // 0 means use default logic (turns * 1000)
+    },
+    coinPrice: {
+      type: Number,
+      default: 0, // Only used for packageType: "coin-exchange"
+    },
     packageType: {
       type: String,
-      enum: ["normal", "no-rice"],
+      enum: ["normal", "no-rice", "coin-exchange"],
       default: "normal",
     },
     isActive: {

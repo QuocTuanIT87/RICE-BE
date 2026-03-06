@@ -20,15 +20,21 @@ declare global {
  */
 export const auth = (req: Request, res: Response, next: NextFunction): void => {
   try {
-    // Lấy token từ header
+    // 1. Thử lấy token từ header (ưu tiên cao nhất)
     const authHeader = req.headers.authorization;
+    let token = "";
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      throw new ServiceError("NO_TOKEN", "Không có token xác thực", 401);
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    }
+    // 2. Nếu không có header, thử lấy từ cookie
+    else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
     }
 
-    // Tách token từ "Bearer <token>"
-    const token = authHeader.split(" ")[1];
+    if (!token) {
+      throw new ServiceError("NO_TOKEN", "Không có token xác thực", 401);
+    }
 
     // Verify token
     const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;

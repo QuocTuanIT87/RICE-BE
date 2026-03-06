@@ -191,6 +191,15 @@ export const approvePurchaseRequest = async (
       await userDoc.save();
     }
 
+    // Cộng xu bonus cho khách (bonusCoins được cấu hình hoặc mặc định 1000/lượt)
+    const bonusCoins = pkg.bonusCoins && pkg.bonusCoins > 0
+      ? pkg.bonusCoins
+      : pkg.turns * 1000;
+
+    const updatedUser = await User.findByIdAndUpdate(user._id, {
+      $inc: { gameCoins: bonusCoins },
+    }, { new: true });
+
     // Gửi email thông báo
     await sendPackagePurchaseSuccessEmail(
       user.email,
@@ -198,6 +207,7 @@ export const approvePurchaseRequest = async (
       pkg.name,
       pkg.turns,
       pkg.price,
+      bonusCoins,
       new Date(),
     );
 
@@ -205,7 +215,9 @@ export const approvePurchaseRequest = async (
     socketService.emitToUser(user._id.toString(), "purchase_request_approved", {
       requestId: request._id,
       status: "approved",
-      message: `Gói "${pkg.name}" của bạn đã được kích hoạt!`,
+      bonusCoins: bonusCoins,
+      gameCoins: updatedUser?.gameCoins || 0, // Gửi tổng số xu mới
+      message: `Gói "${pkg.name}" của bạn đã được kích hoạt! Bạn nhận được +${bonusCoins.toLocaleString()} Xu thưởng.`,
     });
 
     res.json({

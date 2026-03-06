@@ -62,6 +62,11 @@ const userSchema = new Schema<IUserDocument>(
       ref: "UserPackage",
       default: null,
     },
+    gameCoins: {
+      type: Number,
+      default: 0,
+      min: [0, "Xu không được âm"],
+    },
   },
   {
     timestamps: true,

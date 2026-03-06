@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from "mongoose";
 import { IUserPackage } from "../../types";
 
 // Extend IUserPackage với Document
-export interface IUserPackageDocument extends IUserPackage, Document {}
+export interface IUserPackageDocument extends IUserPackage, Document { }
 
 // Schema definition
 const userPackageSchema = new Schema<IUserPackageDocument>(
@@ -16,7 +16,7 @@ const userPackageSchema = new Schema<IUserPackageDocument>(
     mealPackageId: {
       type: Schema.Types.ObjectId,
       ref: "MealPackage",
-      required: [true, "Meal Package ID là bắt buộc"],
+      default: null, // null cho gói "coin-exchange" (đổi từ xu)
     },
     remainingTurns: {
       type: Number,
@@ -33,7 +33,7 @@ const userPackageSchema = new Schema<IUserPackageDocument>(
     },
     packageType: {
       type: String,
-      enum: ["normal", "no-rice"],
+      enum: ["normal", "no-rice", "coin-exchange"],
       default: "normal",
     },
     isActive: {

@@ -13,6 +13,7 @@ router.post("/login", authController.login);
 
 // Protected routes (cần đăng nhập)
 router.get("/me", auth, authController.getMe);
+router.post("/logout", auth, authController.logout);
 router.patch("/profile", auth, authController.updateProfile);
 router.patch("/change-password", auth, authController.changePassword);
 

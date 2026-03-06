@@ -71,6 +71,7 @@ export const sendPackagePurchaseSuccessEmail = async (
   packageName: string,
   turns: number,
   price: number,
+  bonusCoins: number,
   purchaseTime: Date,
 ): Promise<boolean> => {
   try {
@@ -102,6 +103,7 @@ export const sendPackagePurchaseSuccessEmail = async (
               <p style="margin: 10px 0;"><strong>📦 Tên gói:</strong> ${packageName}</p>
               <p style="margin: 10px 0;"><strong>🎟️ Số lượt:</strong> ${turns} lượt</p>
               <p style="margin: 10px 0;"><strong>💰 Giá:</strong> ${formattedPrice} VND</p>
+              <p style="margin: 10px 0;"><strong>🪙 Thưởng:</strong> <span style="color: #f59e0b; font-weight: bold;">+${bonusCoins.toLocaleString()} Xu</span></p>
               <p style="margin: 10px 0;"><strong>🕐 Thời gian:</strong> ${formattedTime}</p>
             </div>
             <p style="color: #666; font-size: 14px; margin-top: 20px;">
