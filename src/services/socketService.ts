@@ -1,5 +1,6 @@
 import { Server as SocketServer } from "socket.io";
 import { Server as HttpServer } from "http";
+import { bauCuaRoomManager } from "./bauCuaRoomManager";
 
 class SocketService {
     private _io: SocketServer | null = null;
@@ -23,6 +24,9 @@ class SocketService {
 
         console.log("🔌 Socket.io đã được khởi tạo!");
 
+        // Khởi tạo BauCua Manager
+        bauCuaRoomManager.init(this._io);
+
         this._io.on("connection", (socket) => {
             console.log(`👤 Client kết nối: ${socket.id} (transport: ${socket.conn.transport.name})`);
 
@@ -43,7 +47,32 @@ class SocketService {
                 console.log(`👑 Admin đã gia nhập phòng quản trị`);
             });
 
+            // ================= BAU CUA MULTIPLAYER =================
+            socket.on("baucua:get_rooms", () => {
+                socket.emit("baucua:rooms_list", bauCuaRoomManager.getRoomsSummary());
+            });
+
+            socket.on("baucua:join_room", async ({ roomIdx, user }) => {
+                if (user) {
+                    await bauCuaRoomManager.joinRoom(socket, roomIdx, user);
+                }
+            });
+
+            socket.on("baucua:start_round", ({ roomId }) => {
+                bauCuaRoomManager.startRound(socket, roomId);
+            });
+
+            socket.on("baucua:place_bet", async ({ roomId, mascot, amount }) => {
+                await bauCuaRoomManager.placeBet(socket, roomId, mascot, amount);
+            });
+
+            socket.on("baucua:leave_room", () => {
+                bauCuaRoomManager.leaveAllRooms(socket);
+            });
+            // =======================================================
+
             socket.on("disconnect", (reason) => {
+                bauCuaRoomManager.leaveAllRooms(socket);
                 console.log(`👋 Client ngắt kết nối: ${socket.id} (reason: ${reason})`);
             });
         });
