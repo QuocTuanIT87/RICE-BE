@@ -5,7 +5,12 @@ import { auth, adminOnly } from "../../middlewares";
 
 const router = Router();
 
-// Tất cả routes đều cần admin
+// Route public (chỉ cần đăng nhập)
+router.get("/leaderboard", auth, usersController.getLeaderboard);
+router.get("/leaderboard/coins", auth, usersController.getTopCoins);
+router.get("/leaderboard/orders", auth, usersController.getTopOrders);
+
+// Tất cả routes bên dưới đều cần admin
 router.use(auth, adminOnly);
 
 router.get("/", usersController.getUsers);

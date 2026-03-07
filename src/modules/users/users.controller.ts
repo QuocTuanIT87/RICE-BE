@@ -208,3 +208,154 @@ export const resetUserPassword = async (
     next(error);
   }
 };
+
+/**
+ * GET /api/users/leaderboard
+ * Lấy bảng xếp hạng Top Đại Gia (Public)
+ */
+export const getLeaderboard = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const topUsers = await UserPackage.aggregate([
+      // Lọc các gói đang active và chưa hết hạn
+      {
+        $match: {
+          isActive: true,
+          expiresAt: { $gt: new Date() },
+          remainingTurns: { $gt: 0 },
+        },
+      },
+      // Group theo userId và tính tổng lượt
+      {
+        $group: {
+          _id: "$userId",
+          totalTurns: { $sum: "$remainingTurns" },
+          packageCount: { $sum: 1 },
+        },
+      },
+      // Sắp xếp giảm dần theo tổng lượt
+      {
+        $sort: { totalTurns: -1 },
+      },
+      // Giới hạn top 10
+      {
+        $limit: 10,
+      },
+      // Join với collection users để lấy thông tin
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "userInfo",
+        },
+      },
+      // Unwind userInfo array
+      {
+        $unwind: "$userInfo",
+      },
+      // Project ra các trường cần thiết
+      {
+        $project: {
+          _id: 1,
+          totalTurns: 1,
+          packageCount: 1,
+          name: "$userInfo.name",
+          gameCoins: "$userInfo.gameCoins",
+          // Mặc định avatar nếu có
+          avatar: "$userInfo.avatar",
+        },
+      },
+    ]);
+
+    res.json({
+      success: true,
+      data: topUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/users/leaderboard/coins
+ * Lấy bảng xếp hạng Top Tỷ Phú Xu (Public)
+ */
+export const getTopCoins = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const topUsers = await User.find({ role: { $ne: "admin" } })
+      .select("name avatar gameCoins")
+      .sort({ gameCoins: -1 })
+      .limit(10);
+
+    res.json({
+      success: true,
+      data: topUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/users/leaderboard/orders
+ * Lấy bảng xếp hạng Top Siêu Ăn Uống (Public)
+ */
+export const getTopOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const topUsers = await Order.aggregate([
+      // Chỉ tính các đơn đã xác nhận (tùy nhu cầu, ở đây tính hết cũng được)
+      // { $match: { isConfirmed: true } },
+      {
+        $group: {
+          _id: "$userId",
+          orderCount: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { orderCount: -1 },
+      },
+      {
+        $limit: 10,
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "userInfo",
+        },
+      },
+      {
+        $unwind: "$userInfo",
+      },
+      {
+        $project: {
+          _id: 1,
+          orderCount: 1,
+          name: "$userInfo.name",
+          gameCoins: "$userInfo.gameCoins",
+          avatar: "$userInfo.avatar",
+        },
+      },
+    ]);
+
+    res.json({
+      success: true,
+      data: topUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
