@@ -93,7 +93,7 @@ export const createOrder = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    // Nhận mảng items: [{ menuItemId, note }] và orderType: "normal" | "no-rice"
+    // Nhận mảng items: [{ menuItemId, note, quantity }] và orderType: "normal" | "no-rice"
     const { items, orderType = "normal" } = req.body;
     const userId = req.user!.userId;
 
@@ -145,32 +145,27 @@ export const createOrder = async (
     // Lấy thông tin user để xem gói mặc định (activePackageId)
     const user = await User.findById(userId).select("activePackageId");
 
-    let userPackage = null;
+    // Tìm TẤT CẢ gói khả dụng (sắp xếp gói mặc định lên đầu, sau đó theo ngày hết hạn)
+    const allPackages = await UserPackage.find({
+      userId,
+      packageType: { $in: [orderType, "coin-exchange"] },
+      isActive: true,
+      remainingTurns: { $gt: 0 },
+      expiresAt: { $gt: new Date() },
+    }).sort({ expiresAt: 1 });
 
-    // 1. Thử dùng gói mặc định nếu có và hợp lệ
+    // Đưa gói mặc định lên đầu nếu có
     if (user?.activePackageId) {
-      userPackage = await UserPackage.findOne({
-        _id: user.activePackageId,
-        userId,
-        packageType: { $in: [orderType, "coin-exchange"] },
-        isActive: true,
-        remainingTurns: { $gt: 0 },
-        expiresAt: { $gt: new Date() },
-      });
+      const activeIdx = allPackages.findIndex(
+        (p) => p._id.toString() === user.activePackageId!.toString(),
+      );
+      if (activeIdx > 0) {
+        const [activePkg] = allPackages.splice(activeIdx, 1);
+        allPackages.unshift(activePkg);
+      }
     }
 
-    // 2. Nếu không có gói mặc định hoặc gói mặc định không hợp lệ, tìm gói cũ nhất sắp hết hạn
-    if (!userPackage) {
-      userPackage = await UserPackage.findOne({
-        userId,
-        packageType: { $in: [orderType, "coin-exchange"] },
-        isActive: true,
-        remainingTurns: { $gt: 0 },
-        expiresAt: { $gt: new Date() },
-      }).sort({ expiresAt: 1 });
-    }
-
-    if (!userPackage) {
+    if (allPackages.length === 0) {
       const packageLabel =
         orderType === "normal" ? "bình thường (có cơm)" : "không cơm";
       throw new ServiceError(
@@ -180,15 +175,27 @@ export const createOrder = async (
       );
     }
 
-    // Kiểm tra số lượt còn lại có đủ cho số món muốn đặt không
-    const itemsCount = items?.length || 0;
-    if (itemsCount > userPackage.remainingTurns) {
+    // Tính tổng lượt từ TẤT CẢ gói
+    const totalAvailableTurns = allPackages.reduce(
+      (sum, pkg) => sum + (pkg.remainingTurns || 0),
+      0,
+    );
+
+    // Kiểm tra số lượt còn lại có đủ cho tổng số lượng muốn đặt không
+    const totalQuantity = (items || []).reduce(
+      (sum: number, item: { quantity?: number }) => sum + (item.quantity || 1),
+      0,
+    );
+    if (totalQuantity > totalAvailableTurns) {
       throw new ServiceError(
         "NOT_ENOUGH_TURNS",
-        `Bạn chỉ còn ${userPackage.remainingTurns} lượt, không đủ để đặt ${itemsCount} món`,
+        `Bạn chỉ còn ${totalAvailableTurns} lượt, không đủ để đặt ${totalQuantity} phần`,
         400,
       );
     }
+
+    // Dùng gói đầu tiên làm gói chính cho order (ưu tiên gói mặc định)
+    const userPackage = allPackages[0];
 
     // Kiểm tra đã đặt cơm hôm nay chưa
     const existingOrder = await Order.findOne({
@@ -204,13 +211,13 @@ export const createOrder = async (
 
       await OrderItem.deleteMany({ orderId: existingOrder._id });
 
-      // Tạo các order items mới với ghi chú
+      // Tạo các order items mới với ghi chú và số lượng
       if (items && items.length > 0) {
         await OrderItem.insertMany(
-          items.map((item: { menuItemId: string; note?: string }) => ({
+          items.map((item: { menuItemId: string; note?: string; quantity?: number }) => ({
             orderId: existingOrder._id,
             menuItemId: item.menuItemId,
-            quantity: 1,
+            quantity: item.quantity || 1,
             note: item.note || "",
           })),
         );
@@ -246,13 +253,13 @@ export const createOrder = async (
     });
     await order.save();
 
-    // Tạo các order items với ghi chú
+    // Tạo các order items với ghi chú và số lượng
     if (items && items.length > 0) {
       await OrderItem.insertMany(
-        items.map((item: { menuItemId: string; note?: string }) => ({
+        items.map((item: { menuItemId: string; note?: string; quantity?: number }) => ({
           orderId: order._id,
           menuItemId: item.menuItemId,
-          quantity: 1,
+          quantity: item.quantity || 1,
           note: item.note || "",
         })),
       );
@@ -379,15 +386,56 @@ export const confirmAllOrders = async (
 
     // Xác nhận và trừ lượt cho từng order
     for (const order of orders) {
-      // Đếm số món ăn trong order (mỗi món = 1 lượt)
+      // Tính tổng số lượng (quantity) trong order
       const orderItems = (order as any).orderItems || [];
-      const itemCount = orderItems.length;
+      const itemCount = orderItems.reduce(
+        (sum: number, item: any) => sum + (item.quantity || 1),
+        0,
+      );
 
       if (itemCount > 0) {
-        // Trừ lượt bằng số món ăn
-        await UserPackage.findByIdAndUpdate(order.userPackageId, {
-          $inc: { remainingTurns: -itemCount },
-        });
+        // Tìm TẤT CẢ gói khả dụng của user này (sắp hết hạn trước)
+        const userPackages = await UserPackage.find({
+          userId: order.userId,
+          packageType: { $in: [(order as any).orderType || "normal", "coin-exchange"] },
+          isActive: true,
+          remainingTurns: { $gt: 0 },
+          expiresAt: { $gt: new Date() },
+        }).sort({ expiresAt: 1 });
+
+        // Ưu tiên gói được gắn với order lên đầu
+        const linkedIdx = userPackages.findIndex(
+          (p) => p._id.toString() === order.userPackageId?.toString(),
+        );
+        if (linkedIdx > 0) {
+          const [linkedPkg] = userPackages.splice(linkedIdx, 1);
+          userPackages.unshift(linkedPkg);
+        }
+
+        // Phân bổ trừ lượt từ gói đầu tiên, tràn sang gói tiếp theo
+        let remaining = itemCount;
+        for (const pkg of userPackages) {
+          if (remaining <= 0) break;
+
+          const deduct = Math.min(remaining, pkg.remainingTurns);
+          pkg.remainingTurns -= deduct;
+          remaining -= deduct;
+
+          await pkg.save();
+
+          // Deactivate package nếu hết lượt
+          if (pkg.remainingTurns <= 0) {
+            pkg.isActive = false;
+            await pkg.save();
+
+            // Nếu đây là gói mặc định của user, xóa nó đi
+            const userWithPkg = await User.findById(order.userId).select("activePackageId");
+            if (userWithPkg && userWithPkg.activePackageId?.toString() === pkg._id.toString()) {
+              userWithPkg.activePackageId = undefined;
+              await userWithPkg.save();
+            }
+          }
+        }
 
         totalItemsConfirmed += itemCount;
       }
@@ -395,20 +443,6 @@ export const confirmAllOrders = async (
       // Đánh dấu đã confirm
       order.isConfirmed = true;
       await order.save();
-
-      // Kiểm tra và deactivate package nếu hết lượt
-      const userPackage = await UserPackage.findById(order.userPackageId);
-      if (userPackage && userPackage.remainingTurns <= 0) {
-        userPackage.isActive = false;
-        await userPackage.save();
-
-        // Nếu đây là gói mặc định của user, xóa nó đi để fallback về gói khác
-        const userWithPkg = await User.findById(order.userId).select("activePackageId");
-        if (userWithPkg && userWithPkg.activePackageId?.toString() === userPackage._id.toString()) {
-          userWithPkg.activePackageId = undefined;
-          await userWithPkg.save();
-        }
-      }
 
       // Thông báo cho từng user (optional but nice)
       socketService.emitToUser(order.userId.toString(), "order_confirmed", {
@@ -474,11 +508,15 @@ export const getCopyText = async (
 
       if (orderItems.length === 0) continue;
 
-      // Đếm số món
+      // Đếm tổng số lượng
+      const orderTotalQty = orderItems.reduce(
+        (sum: number, item: any) => sum + (item.quantity || 1),
+        0,
+      );
       if (isNoRice) {
-        totalNoRiceMeals += orderItems.length;
+        totalNoRiceMeals += orderTotalQty;
       } else {
-        totalNormalMeals += orderItems.length;
+        totalNormalMeals += orderTotalQty;
       }
 
       // Tạo chi tiết đơn hàng của user
@@ -493,8 +531,11 @@ export const getCopyText = async (
         }
         itemSummary[itemId].count += item.quantity;
 
-        // Format: Tên món (ghi chú nếu có)
+        // Format: Tên món ×SL (ghi chú nếu có)
         let itemText = menuItem.name;
+        if (item.quantity && item.quantity > 1) {
+          itemText += ` ×${item.quantity}`;
+        }
         if (item.note && item.note.trim()) {
           itemText += ` (${item.note.trim()})`;
         }
