@@ -141,8 +141,8 @@ export const createDailyMenu = async (
     const {
       rawContent,
       menuDate,
-      beginAt = "10:00",
-      endAt = "10:45",
+      beginAt = "09:45",
+      endAt = "10:36",
     } = req.body;
 
     // Lấy ngày menu (không giới hạn số menu mỗi ngày)
