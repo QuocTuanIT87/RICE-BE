@@ -141,7 +141,7 @@ export const createDailyMenu = async (
     const {
       rawContent,
       menuDate,
-      beginAt = "09:45",
+      beginAt = "09:00",
       endAt = "10:36",
     } = req.body;
 
