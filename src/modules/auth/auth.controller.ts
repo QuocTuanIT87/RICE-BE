@@ -26,8 +26,9 @@ const createToken = (user: IUserDocument): string => {
 const COOKIE_OPTIONS = {
   httpOnly: true, // Không cho JS truy cập
   secure: env.NODE_ENV === "production", // Chỉ gửi qua HTTPS trong prod
-  sameSite: (env.NODE_ENV === "production" ? "none" : "lax") as any, // Cross-site support if needed
+  sameSite: (env.NODE_ENV === "production" ? "none" : "lax") as any, // "none" nếu là cross-site (cần HTTPS)
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 ngày
+  path: "/", // Áp dụng cho mọi path
 };
 
 /**
