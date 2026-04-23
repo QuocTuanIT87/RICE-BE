@@ -21,11 +21,24 @@ export const getMealPackages = async (
       filter.isActive = isActive === "true";
     }
 
-    const packages = await MealPackage.find(filter).sort({ turns: 1 });
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 4;
+    const skip = (page - 1) * limit;
+
+    const [packages, total] = await Promise.all([
+      MealPackage.find(filter).sort({ turns: 1 }).skip(skip).limit(limit),
+      MealPackage.countDocuments(filter),
+    ]);
 
     res.json({
       success: true,
-      data: packages,
+      data: {
+        docs: packages,
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     next(error);

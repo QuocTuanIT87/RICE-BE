@@ -21,16 +21,28 @@ export const getDailyMenus = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { limit = 10 } = req.query;
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 6;
+    const skip = (page - 1) * limit;
 
-    const menus = await DailyMenu.find()
-      .populate("createdBy", "name")
-      .sort({ menuDate: -1 })
-      .limit(Number(limit));
+    const [menus, total] = await Promise.all([
+      DailyMenu.find()
+        .populate("createdBy", "name")
+        .sort({ menuDate: -1 })
+        .skip(skip)
+        .limit(limit),
+      DailyMenu.countDocuments(),
+    ]);
 
     res.json({
       success: true,
-      data: menus,
+      data: {
+        docs: menus,
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     next(error);

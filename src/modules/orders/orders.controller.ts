@@ -333,18 +333,17 @@ export const getOrdersByDate = async (
       return;
     }
 
-    // Lấy tất cả orders của menu này
-    const orders = await Order.find({ dailyMenuId: menu._id })
+    // Lấy tất cả orders của menu này để tính summary
+    const allOrders = await Order.find({ dailyMenuId: menu._id })
       .populate("userId", "name email")
       .populate({
         path: "orderItems",
         populate: { path: "menuItemId" },
       });
 
-    // Tổng hợp số lượng món ăn
+    // Tổng hợp số lượng món ăn từ TẤT CẢ orders
     const itemSummary: { [key: string]: { name: string; count: number } } = {};
-
-    for (const order of orders) {
+    for (const order of allOrders) {
       const orderItems = (order as any).orderItems || [];
       for (const item of orderItems) {
         const menuItem = item.menuItemId as any;
@@ -361,11 +360,35 @@ export const getOrdersByDate = async (
       (a, b) => b.count - a.count,
     );
 
+    // Phân trang danh sách orders để hiển thị
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 4;
+    const skip = (page - 1) * limit;
+
+    const [paginatedOrders, total] = await Promise.all([
+      Order.find({ dailyMenuId: menu._id })
+        .populate("userId", "name email")
+        .populate({
+          path: "orderItems",
+          populate: { path: "menuItemId" },
+        })
+        .sort({ orderedAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Order.countDocuments({ dailyMenuId: menu._id }),
+    ]);
+
     res.json({
       success: true,
       data: {
         menu,
-        orders,
+        orders: {
+          docs: paginatedOrders,
+          total,
+          page,
+          limit,
+          pages: Math.ceil(total / limit),
+        },
         summary,
       },
     });

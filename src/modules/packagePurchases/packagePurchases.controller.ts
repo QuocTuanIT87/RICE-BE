@@ -23,14 +23,29 @@ export const getPurchaseRequests = async (
     const filter: any = {};
     if (status) filter.status = status;
 
-    const requests = await PackagePurchaseRequest.find(filter)
-      .populate("userId", "name email")
-      .populate("mealPackageId")
-      .sort({ requestedAt: -1 });
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 4;
+    const skip = (page - 1) * limit;
+
+    const [requests, total] = await Promise.all([
+      PackagePurchaseRequest.find(filter)
+        .populate("userId", "name email")
+        .populate("mealPackageId")
+        .sort({ requestedAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      PackagePurchaseRequest.countDocuments(filter),
+    ]);
 
     res.json({
       success: true,
-      data: requests,
+      data: {
+        docs: requests,
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     next(error);

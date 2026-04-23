@@ -5,12 +5,14 @@
   "main": "dist/app.js",
   "scripts": {
     "dev": "tsx watch src/app.ts",
-    "build": "tsc",
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc",
     "start": "node dist/app.js",
     "start:prod": "pm2 start dist/app.js --name rice-order-api",
     "restart:prod": "pm2 restart app",
     "stop:prod": "pm2 stop app",
-    "seed": "tsx src/scripts/seed.ts"
+    "seed": "tsx src/scripts/seed.ts",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -38,6 +40,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.10"
+    "@types/cookie-parser": "^1.4.10",
+    "rimraf": "^6.1.3"
   }
 }
