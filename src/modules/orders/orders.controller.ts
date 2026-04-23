@@ -50,17 +50,23 @@ export const getMyTodayOrder = async (
   try {
     const startOfDay = getStartOfDay();
     const endOfDay = getEndOfDay();
+    const { menuId } = req.query;
 
-    // Tìm menu hôm nay
-    const menu = await DailyMenu.findOne({
-      menuDate: { $gte: startOfDay, $lte: endOfDay },
-    });
+    let menu;
+    if (menuId) {
+      menu = await DailyMenu.findById(menuId);
+    } else {
+      // Tìm menu đầu tiên của hôm nay
+      menu = await DailyMenu.findOne({
+        menuDate: { $gte: startOfDay, $lte: endOfDay },
+      });
+    }
 
     if (!menu) {
       res.json({
         success: true,
         data: null,
-        message: "Chưa có menu hôm nay",
+        message: "Chưa có menu này",
       });
       return;
     }

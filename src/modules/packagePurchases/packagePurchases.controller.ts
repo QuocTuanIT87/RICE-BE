@@ -4,6 +4,7 @@ import { PackagePurchaseRequest } from "./packagePurchaseRequest.model";
 import { MealPackage } from "../mealPackages/mealPackage.model";
 import { UserPackage } from "../userPackages/userPackage.model";
 import { User } from "../auth/user.model";
+import { Voucher } from "../vouchers/voucher.model";
 import { ServiceError } from "../../middlewares";
 import { sendPackagePurchaseSuccessEmail, socketService } from "../../services";
 
@@ -99,12 +100,85 @@ export const createPurchaseRequest = async (
       );
     }
 
+    // Xử lý Voucher nếu có
+    let discountAmount = 0;
+    let finalPrice = pkg.price;
+    let voucherId = null;
+
+    if (req.body.voucherCode) {
+      const voucher = await Voucher.findOne({
+        code: req.body.voucherCode.toUpperCase().trim(),
+        isActive: true,
+      });
+
+      if (!voucher) {
+        throw new ServiceError("INVALID_VOUCHER", "Mã giảm giá không hợp lệ", 400);
+      }
+
+      const now = new Date();
+      if (now < voucher.validFrom || now > voucher.validTo) {
+        throw new ServiceError("VOUCHER_EXPIRED", "Mã giảm giá đã hết hạn", 400);
+      }
+
+      if (voucher.usedCount >= voucher.usageLimit) {
+        throw new ServiceError("VOUCHER_LIMIT_REACHED", "Mã giảm giá đã hết lượt sử dụng", 400);
+      }
+
+      // KIỂM TRA USER ĐÃ DÙNG CHƯA
+      if (voucher.usedByUsers.some(id => id.toString() === userId)) {
+        throw new ServiceError("VOUCHER_ALREADY_USED", "Bạn đã sử dụng mã giảm giá này rồi", 400);
+      }
+
+      // KIỂM TRA XEM CÓ YÊU CẦU NÀO ĐANG PENDING DÙNG MÃ NÀY KHÔNG
+      const pendingWithVoucher = await PackagePurchaseRequest.findOne({
+        userId,
+        voucherId: voucher._id,
+        status: "pending"
+      });
+
+      if (pendingWithVoucher) {
+        throw new ServiceError("VOUCHER_PENDING", "Bạn đã có một yêu cầu mua gói đang chờ duyệt sử dụng mã này", 400);
+      }
+
+      // KIỂM TRA QUYỀN SỬ DỤNG (NẾU LÀ VOUCHER CHỈ ĐỊNH)
+      if (!voucher.isPublic) {
+        const isTargeted = voucher.targetUsers?.some(id => id.toString() === userId);
+        if (!isTargeted) {
+          throw new ServiceError("NOT_TARGETED_USER", "Bạn không thuộc đối tượng được sử dụng mã giảm giá này", 403);
+        }
+      }
+
+      if (voucher.minPurchase && pkg.price < voucher.minPurchase) {
+        throw new ServiceError(
+          "MIN_PURCHASE_NOT_MET",
+          `Giá trị gói tối thiểu ${voucher.minPurchase.toLocaleString()}đ để dùng mã này`,
+          400
+        );
+      }
+
+      // Tính toán số tiền giảm
+      if (voucher.discountType === "fixed") {
+        discountAmount = voucher.discountValue;
+      } else {
+        discountAmount = (pkg.price * voucher.discountValue) / 100;
+        if (voucher.maxDiscount && discountAmount > voucher.maxDiscount) {
+          discountAmount = voucher.maxDiscount;
+        }
+      }
+
+      finalPrice = Math.max(0, pkg.price - discountAmount);
+      voucherId = voucher._id;
+    }
+
     // Tạo yêu cầu mới
     const request = new PackagePurchaseRequest({
       userId,
       mealPackageId,
       status: "pending",
       requestedAt: new Date(),
+      voucherId,
+      discountAmount,
+      finalPrice,
     });
 
     await request.save();
@@ -183,6 +257,14 @@ export const approvePurchaseRequest = async (
     request.processedAt = new Date();
     request.processedBy = req.user!.userId as any;
     await request.save();
+
+    // Nếu có voucher, tăng số lượt đã dùng và thêm user vào danh sách đã dùng
+    if (request.voucherId) {
+      await Voucher.findByIdAndUpdate(request.voucherId, {
+        $inc: { usedCount: 1 },
+        $addToSet: { usedByUsers: user._id },
+      });
+    }
 
     // Nếu user chưa có activePackage, set package này làm mặc định
     const userDoc = await User.findById(user._id);

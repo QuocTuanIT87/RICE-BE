@@ -132,6 +132,7 @@ export const verifyOTP = async (
           email: user.email,
           role: user.role,
           gameCoins: user.gameCoins,
+          createdAt: user.createdAt,
         },
       },
     });
@@ -236,6 +237,7 @@ export const login = async (
           email: user.email,
           role: user.role,
           gameCoins: user.gameCoins,
+          createdAt: user.createdAt,
         },
       },
     });
@@ -271,6 +273,7 @@ export const getMe = async (
         isVerified: user.isVerified,
         gameCoins: user.gameCoins,
         activePackage: user.activePackageId,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {
@@ -310,6 +313,9 @@ export const updateProfile = async (
         email: user.email,
         phone: user.phone,
         role: user.role,
+        isVerified: user.isVerified,
+        gameCoins: user.gameCoins,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {

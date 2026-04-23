@@ -83,6 +83,9 @@ export interface IPackagePurchaseRequest {
   requestedAt: Date;
   processedAt?: Date;
   processedBy?: Types.ObjectId; // Admin xử lý
+  voucherId?: Types.ObjectId; // Mã giảm giá áp dụng
+  discountAmount?: number; // Số tiền được giảm
+  finalPrice?: number; // Giá cuối cùng sau giảm
   createdAt?: Date;
   updatedAt?: Date;
 }

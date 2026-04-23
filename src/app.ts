@@ -17,6 +17,7 @@ import { dailyMenusRoutes } from "./modules/dailyMenus";
 import { ordersRoutes } from "./modules/orders";
 import { statisticsRoutes } from "./modules/statistics";
 import { gameCoinsRoutes } from "./modules/gameCoins";
+import voucherRoutes from "./modules/vouchers/vouchers.routes";
 
 // Tạo app Express
 const app: Application = express();
@@ -69,6 +70,7 @@ app.use("/api/daily-menus", dailyMenusRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/statistics", statisticsRoutes);
 app.use("/api/game-coins", gameCoinsRoutes);
+app.use("/api/vouchers", voucherRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

@@ -36,6 +36,17 @@ const packagePurchaseRequestSchema =
         type: Schema.Types.ObjectId,
         ref: "User",
       },
+      voucherId: {
+        type: Schema.Types.ObjectId,
+        ref: "Voucher",
+      },
+      discountAmount: {
+        type: Number,
+        default: 0,
+      },
+      finalPrice: {
+        type: Number,
+      },
     },
     {
       timestamps: true,
