@@ -204,6 +204,15 @@ export const createOrder = async (
     });
 
     if (existingOrder) {
+      // KHÔNG cho phép cập nhật nếu đơn hàng đã được admin xác nhận
+      if (existingOrder.isConfirmed) {
+        throw new ServiceError(
+          "ORDER_ALREADY_CONFIRMED",
+          "Đơn hàng đã được admin xác nhận, không thể thay đổi nữa",
+          400,
+        );
+      }
+
       // Cập nhật order hiện có (bao gồm cả orderType nếu thay đổi)
       existingOrder.orderType = orderType as any;
       existingOrder.userPackageId = userPackage._id;
@@ -583,6 +592,57 @@ export const getCopyText = async (
         totalNoRiceMeals,
         totalOrders: orders.length,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/orders/:id
+ * Hủy đơn hàng (User)
+ */
+export const deleteOrder = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      throw new ServiceError("ORDER_NOT_FOUND", "Không tìm thấy đơn hàng", 404);
+    }
+
+    // Chỉ chủ nhân đơn hàng mới được xóa
+    if (order.userId.toString() !== req.user!.userId) {
+      throw new ServiceError("FORBIDDEN", "Bạn không có quyền xóa đơn hàng này", 403);
+    }
+
+    // Không cho phép xóa nếu đã confirmed
+    if (order.isConfirmed) {
+      throw new ServiceError(
+        "ORDER_ALREADY_CONFIRMED",
+        "Đơn hàng đã được xác nhận, không thể hủy",
+        400,
+      );
+    }
+
+    // Xóa order items trước
+    await OrderItem.deleteMany({ orderId: order._id });
+    
+    // Xóa order
+    await order.deleteOne();
+
+    // Thông báo cho Admin
+    socketService.emitToAdmin("order_deleted", {
+      orderId: order._id,
+      menuId: order.dailyMenuId,
+    });
+
+    res.json({
+      success: true,
+      message: "Đã hủy đơn đặt cơm thành công!",
     });
   } catch (error) {
     next(error);

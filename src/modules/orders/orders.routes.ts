@@ -9,6 +9,7 @@ const router = Router();
 router.get("/my", auth, ordersController.getMyOrders);
 router.get("/today", auth, ordersController.getMyTodayOrder);
 router.post("/", auth, ordersController.createOrder);
+router.delete("/:id", auth, ordersController.deleteOrder);
 
 // Admin routes
 router.get("/by-date/:date", auth, adminOnly, ordersController.getOrdersByDate);
