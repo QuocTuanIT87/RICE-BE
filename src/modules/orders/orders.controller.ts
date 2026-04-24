@@ -29,9 +29,29 @@ export const getMyOrders = async (
       .sort({ orderedAt: -1 })
       .limit(20);
 
+    // Tính toán menuIndex cho từng order
+    const ordersWithIndex = await Promise.all(
+      orders.map(async (order) => {
+        const orderObj = order.toObject();
+        const menuObj = orderObj.dailyMenuId as any;
+        if (menuObj && menuObj.menuDate) {
+          const start = getStartOfDay(new Date(menuObj.menuDate));
+          const end = getEndOfDay(new Date(menuObj.menuDate));
+          const menusForDay = await DailyMenu.find({
+            menuDate: { $gte: start, $lte: end },
+          }).sort({ _id: 1 });
+          const index = menusForDay.findIndex(
+            (m) => m._id.toString() === menuObj._id.toString(),
+          );
+          return { ...orderObj, menuIndex: index >= 0 ? index + 1 : 1 };
+        }
+        return { ...orderObj, menuIndex: 1 };
+      }),
+    );
+
     res.json({
       success: true,
-      data: orders,
+      data: ordersWithIndex,
     });
   } catch (error) {
     next(error);
@@ -312,25 +332,40 @@ export const getOrdersByDate = async (
 ): Promise<void> => {
   try {
     const dateParam = req.params.date; // Format: YYYY-MM-DD
+    const menuIdParam = req.query.menuId as string;
     const date = new Date(dateParam);
     const startOfDay = getStartOfDay(date);
     const endOfDay = getEndOfDay(date);
 
-    // Tìm menu của ngày này
-    const menu = await DailyMenu.findOne({
+    // Tìm tất cả menu của ngày này
+    const menus = await DailyMenu.find({
       menuDate: { $gte: startOfDay, $lte: endOfDay },
     });
 
-    if (!menu) {
+    if (!menus || menus.length === 0) {
       res.json({
         success: true,
         data: {
+          menus: [],
           menu: null,
-          orders: [],
+          orders: {
+            docs: [],
+            total: 0,
+            page: 1,
+            limit: 4,
+            pages: 0,
+          },
           summary: [],
         },
       });
       return;
+    }
+
+    // Xác định menu sẽ lấy dữ liệu
+    let menu = menus[0];
+    if (menuIdParam) {
+      const foundMenu = menus.find((m) => m._id.toString() === menuIdParam);
+      if (foundMenu) menu = foundMenu;
     }
 
     // Lấy tất cả orders của menu này để tính summary
@@ -381,6 +416,7 @@ export const getOrdersByDate = async (
     res.json({
       success: true,
       data: {
+        menus,
         menu,
         orders: {
           docs: paginatedOrders,
