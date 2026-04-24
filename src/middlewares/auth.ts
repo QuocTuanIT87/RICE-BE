@@ -61,6 +61,33 @@ export const auth = (req: Request, res: Response, next: NextFunction): void => {
 };
 
 /**
+ * Middleware xác thực token "mềm"
+ * Cố gắng nạp user vào request nếu có token, nhưng không báo lỗi nếu không có
+ */
+export const softAuth = (req: Request, res: Response, next: NextFunction): void => {
+  try {
+    const authHeader = req.headers.authorization;
+    let token = "";
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    } else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
+
+    if (token) {
+      const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+      (req as any).user = decoded;
+    }
+    
+    next();
+  } catch (error) {
+    // Không quan tâm lỗi ở đây
+    next();
+  }
+};
+
+/**
  * Middleware kiểm tra quyền admin
  * Phải dùng SAU middleware auth
  */

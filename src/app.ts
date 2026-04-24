@@ -18,6 +18,9 @@ import { ordersRoutes } from "./modules/orders";
 import { statisticsRoutes } from "./modules/statistics";
 import { gameCoinsRoutes } from "./modules/gameCoins";
 import voucherRoutes from "./modules/vouchers/vouchers.routes";
+import { systemRoutes } from "./modules/system";
+import { maintenanceMiddleware } from "./middlewares/maintenance";
+import { softAuth } from "./middlewares";
 
 // Tạo app Express
 const app: Application = express();
@@ -61,6 +64,12 @@ app.get("/api/health", (req: Request, res: Response) => {
 });
 
 // API Routes
+app.use("/api/system", systemRoutes);
+
+// Tự động nạp user nếu có token để middleware bảo trì biết ai là Admin
+app.use(softAuth);
+app.use(maintenanceMiddleware);
+
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/meal-packages", mealPackagesRoutes);
