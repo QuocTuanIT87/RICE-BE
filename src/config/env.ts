@@ -14,6 +14,7 @@ interface EnvConfig {
   EMAIL_USER: string;
   EMAIL_PASS: string;
   FRONTEND_URL: string;
+  LICENSE_KEY: string;
 }
 
 // Export cấu hình môi trường với giá trị mặc định
@@ -28,4 +29,5 @@ export const env: EnvConfig = {
   EMAIL_USER: process.env.EMAIL_USER || "",
   EMAIL_PASS: process.env.EMAIL_PASS || "",
   FRONTEND_URL: process.env.FRONTEND_URL || "http://localhost:3000",
+  LICENSE_KEY: process.env.LICENSE_KEY || "",
 };

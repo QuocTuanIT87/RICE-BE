@@ -20,7 +20,7 @@ import { gameCoinsRoutes } from "./modules/gameCoins";
 import voucherRoutes from "./modules/vouchers/vouchers.routes";
 import { systemRoutes } from "./modules/system";
 import { maintenanceMiddleware } from "./middlewares/maintenance";
-import { softAuth } from "./middlewares";
+import { softAuth, licenseMiddleware } from "./middlewares";
 
 // Tạo app Express
 const app: Application = express();
@@ -42,6 +42,9 @@ app.use(
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Chặn toàn bộ nếu không có License Key hợp lệ
+app.use(licenseMiddleware);
 
 // Khởi tạo Socket.io - dùng cùng CORS origins với Express
 const socketCorsOrigins: (string | RegExp)[] = [
