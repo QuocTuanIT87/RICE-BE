@@ -57,6 +57,7 @@ const packagePurchaseRequestSchema =
 // Index
 packagePurchaseRequestSchema.index({ userId: 1 });
 packagePurchaseRequestSchema.index({ status: 1 });
+packagePurchaseRequestSchema.index({ voucherId: 1 });
 packagePurchaseRequestSchema.index({ requestedAt: -1 });
 
 // Export model

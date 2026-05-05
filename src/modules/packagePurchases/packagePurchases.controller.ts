@@ -135,13 +135,27 @@ export const createPurchaseRequest = async (
         throw new ServiceError("VOUCHER_EXPIRED", "Mã giảm giá đã hết hạn", 400);
       }
 
-      if (voucher.usedCount >= voucher.usageLimit) {
-        throw new ServiceError("VOUCHER_LIMIT_REACHED", "Mã giảm giá đã hết lượt sử dụng", 400);
+      // TÍNH CẢ CÁC YÊU CẦU ĐANG CHỜ DUYỆT VÀO LƯỢT SỬ DỤNG
+      const pendingCount = await PackagePurchaseRequest.countDocuments({
+        voucherId: voucher._id,
+        status: "pending",
+      });
+
+      if (voucher.usedCount + pendingCount >= voucher.usageLimit) {
+        throw new ServiceError(
+          "VOUCHER_LIMIT_REACHED",
+          "Mã giảm giá đã hết lượt sử dụng (bao gồm các yêu cầu đang chờ duyệt)",
+          400,
+        );
       }
 
-      // KIỂM TRA USER ĐÃ DÙNG CHƯA
-      if (voucher.usedByUsers.some(id => id.toString() === userId)) {
-        throw new ServiceError("VOUCHER_ALREADY_USED", "Bạn đã sử dụng mã giảm giá này rồi", 400);
+      // KIỂM TRA USER ĐÃ DÙNG CHƯA (Đã duyệt)
+      if (voucher.usedByUsers.some((id) => id.toString() === userId)) {
+        throw new ServiceError(
+          "VOUCHER_ALREADY_USED",
+          "Bạn đã sử dụng mã giảm giá này rồi",
+          400,
+        );
       }
 
       // KIỂM TRA XEM CÓ YÊU CẦU NÀO ĐANG PENDING DÙNG MÃ NÀY KHÔNG

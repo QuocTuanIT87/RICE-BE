@@ -94,7 +94,6 @@ const voucherSchema = new Schema<IVoucherDocument>(
 );
 
 // Index để tìm kiếm mã nhanh
-voucherSchema.index({ code: 1 }, { unique: true });
 voucherSchema.index({ validTo: 1 });
 
 export const Voucher = mongoose.model<IVoucherDocument>("Voucher", voucherSchema);

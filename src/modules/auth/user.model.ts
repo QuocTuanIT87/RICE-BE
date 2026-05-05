@@ -75,7 +75,6 @@ const userSchema = new Schema<IUserDocument>(
 );
 
 // Index cho tìm kiếm
-userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
 
 // Hash password trước khi save
