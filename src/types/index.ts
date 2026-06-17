@@ -19,8 +19,8 @@ export interface IUser {
   isBlocked: boolean; // Bị khóa tài khoản không
   otpCode?: string; // Mã OTP tạm thời
   otpExpiry?: Date; // Thời gian hết hạn OTP
-  activePackageId?: Types.ObjectId; // Gói đặt cơm đang sử dụng
   gameCoins: number; // Xu chơi game giải trí
+  balance: number; // Số dư ví tiền VND (mới)
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -38,54 +38,23 @@ export interface AuthRequest extends Request {
 }
 
 // =============================================
-// MEAL PACKAGE TYPES
+// DEPOSIT REQUEST TYPES
 // =============================================
 
-// Loại gói đặt cơm: bình thường (có cơm) hoặc không cơm
-export type PackageType = "normal" | "no-rice" | "coin-exchange";
+// Trạng thái yêu cầu nạp tiền
+export type DepositStatus = "pending" | "approved" | "rejected";
 
-// Interface cho gói đặt cơm (do admin tạo)
-export interface IMealPackage {
-  name: string; // Tên gói: "Gói 5 lượt"
-  turns: number; // Số lượt đặt cơm
-  price: number; // Giá gói (VND)
-  validDays: number; // Số ngày hiệu lực
-  packageType: PackageType; // Loại gói: bình thường hoặc không cơm
-  qrCodeImage?: string; // URL ảnh QR thanh toán
-  bonusCoins?: number; // Xu bonus khi mua gói
-  coinPrice?: number; // Giá đổi bằng xu (nếu có)
-  isActive: boolean; // Còn bán không
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-// Interface cho gói đã mua của user
-export interface IUserPackage {
+// Interface cho yêu cầu nạp tiền
+export interface IDepositRequest {
+  _id: string;
   userId: Types.ObjectId;
-  mealPackageId: Types.ObjectId;
-  packageType: PackageType; // Loại gói: bình thường hoặc không cơm
-  remainingTurns: number; // Số lượt còn lại
-  purchasedAt: Date; // Ngày mua
-  expiresAt: Date; // Ngày hết hạn
-  isActive: boolean; // Còn dùng được không
-  createdAt?: Date;
-  updatedAt?: Date;
-}
-
-// Trạng thái yêu cầu mua gói
-export type PurchaseStatus = "pending" | "approved" | "rejected";
-
-// Interface cho yêu cầu mua gói (chờ admin duyệt)
-export interface IPackagePurchaseRequest {
-  userId: Types.ObjectId;
-  mealPackageId: Types.ObjectId;
-  status: PurchaseStatus;
+  amount: number; // Số tiền nạp tự nhập (VND)
+  status: DepositStatus;
   requestedAt: Date;
   processedAt?: Date;
   processedBy?: Types.ObjectId; // Admin xử lý
-  voucherId?: Types.ObjectId; // Mã giảm giá áp dụng
-  discountAmount?: number; // Số tiền được giảm
-  finalPrice?: number; // Giá cuối cùng sau giảm
+  voucherCode?: string; // Mã voucher áp dụng (nếu có)
+  bonusAmount?: number; // Số tiền thưởng khuyến mãi từ voucher
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -122,9 +91,11 @@ export interface IMenuItem {
 export interface IOrder {
   userId: Types.ObjectId;
   dailyMenuId: Types.ObjectId;
-  userPackageId: Types.ObjectId; // Gói dùng để đặt
-  orderType: PackageType; // Loại đặt: có cơm hoặc không cơm
+  orderType: "normal" | "no-rice"; // Loại đặt: có cơm hoặc không cơm
   isConfirmed: boolean; // Admin đã xác nhận chưa
+  totalPrice?: number; // Tổng tiền của đơn đặt cơm (mới)
+  voucherCode?: string; // Mã voucher áp dụng (nếu có)
+  discountAmount?: number; // Số tiền được giảm từ voucher
   orderedAt: Date;
   createdAt?: Date;
   updatedAt?: Date;

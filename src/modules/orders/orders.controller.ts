@@ -4,8 +4,9 @@ import { Order } from "./order.model";
 import { OrderItem } from "./orderItem.model";
 import { DailyMenu } from "../dailyMenus/dailyMenu.model";
 import { MenuItem } from "../menuItems/menuItem.model";
-import { UserPackage } from "../userPackages/userPackage.model";
 import { User } from "../auth/user.model";
+import { Voucher } from "../vouchers/voucher.model";
+import SystemConfig from "../../models/SystemConfig";
 import { ServiceError } from "../../middlewares";
 import { getStartOfDay, getEndOfDay, isWithinTimeRange } from "../../utils";
 import { socketService } from "../../services";
@@ -119,21 +120,9 @@ export const createOrder = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    // Nhận mảng items: [{ menuItemId, note, quantity }] và orderType: "normal" | "no-rice"
-    const { items, orderType = "normal" } = req.body;
+    // Nhận mảng items: [{ menuItemId, note, quantity }], orderType, menuId và voucherCode
+    const { items, orderType = "normal", menuId, voucherCode } = req.body;
     const userId = req.user!.userId;
-
-    // Validate orderType
-    if (orderType !== "normal" && orderType !== "no-rice") {
-      throw new ServiceError(
-        "INVALID_ORDER_TYPE",
-        "Loại đặt cơm không hợp lệ",
-        400,
-      );
-    }
-
-    // Nhận menuId từ frontend - cho phép đặt đúng menu user đã chọn
-    const { menuId } = req.body;
 
     // Nếu có menuId, dùng nó; nếu không thì tìm menu đầu tiên hôm nay (fallback)
     const startOfDay = getStartOfDay();
@@ -168,60 +157,99 @@ export const createOrder = async (
       throw new ServiceError("MENU_LOCKED", message, 400);
     }
 
-    // Lấy thông tin user để xem gói mặc định (activePackageId)
-    const user = await User.findById(userId).select("activePackageId");
-
-    // Tìm TẤT CẢ gói khả dụng (sắp xếp gói mặc định lên đầu, sau đó theo ngày hết hạn)
-    const allPackages = await UserPackage.find({
-      userId,
-      packageType: { $in: [orderType, "coin-exchange"] },
-      isActive: true,
-      remainingTurns: { $gt: 0 },
-      expiresAt: { $gt: new Date() },
-    }).sort({ expiresAt: 1 });
-
-    // Đưa gói mặc định lên đầu nếu có
-    if (user?.activePackageId) {
-      const activeIdx = allPackages.findIndex(
-        (p) => p._id.toString() === user.activePackageId!.toString(),
-      );
-      if (activeIdx > 0) {
-        const [activePkg] = allPackages.splice(activeIdx, 1);
-        allPackages.unshift(activePkg);
-      }
-    }
-
-    if (allPackages.length === 0) {
-      const packageLabel =
-        orderType === "normal" ? "bình thường (có cơm)" : "không cơm";
+    // Validate orderType
+    if (orderType !== "normal" && orderType !== "no-rice") {
       throw new ServiceError(
-        "NO_MATCHING_PACKAGE",
-        `Bạn chưa có gói đặt cơm ${packageLabel} khả dụng. Vui lòng mua gói trước!`,
+        "INVALID_ORDER_TYPE",
+        "Loại đặt cơm không hợp lệ",
         400,
       );
     }
 
-    // Tính tổng lượt từ TẤT CẢ gói
-    const totalAvailableTurns = allPackages.reduce(
-      (sum, pkg) => sum + (pkg.remainingTurns || 0),
-      0,
-    );
+    // Lấy cấu hình giá từ SystemConfig
+    const config = await SystemConfig.findOne();
+    const priceNormal = config?.priceNormal || 30000;
+    const priceNoRice = config?.priceNoRice || 20000;
 
-    // Kiểm tra số lượt còn lại có đủ cho tổng số lượng muốn đặt không
+    // Tính tổng số lượng phần đặt
     const totalQuantity = (items || []).reduce(
       (sum: number, item: { quantity?: number }) => sum + (item.quantity || 1),
       0,
     );
-    if (totalQuantity > totalAvailableTurns) {
+
+    const subtotal = totalQuantity * (orderType === "no-rice" ? priceNoRice : priceNormal);
+
+    // Xử lý áp dụng voucher giảm giá
+    let discountAmount = 0;
+    if (voucherCode) {
+      const voucher = await Voucher.findOne({
+        code: voucherCode.toUpperCase().trim(),
+        isActive: true,
+      });
+
+      if (!voucher) {
+        throw new ServiceError("INVALID_VOUCHER", "Mã voucher không tồn tại hoặc đã hết hiệu lực", 404);
+      }
+
+      if (voucher.voucherType !== "order") {
+        throw new ServiceError("INVALID_VOUCHER_TYPE", "Mã này không phải là voucher đặt cơm", 400);
+      }
+
+      const now = new Date();
+      if (now < voucher.validFrom || now > voucher.validTo) {
+        throw new ServiceError("VOUCHER_EXPIRED", "Mã voucher đã hết hạn sử dụng", 400);
+      }
+
+      if (voucher.usedCount >= voucher.usageLimit) {
+        throw new ServiceError("VOUCHER_LIMIT_REACHED", "Mã voucher đã hết lượt sử dụng", 400);
+      }
+
+      if (voucher.usedByUsers.some(id => id.toString() === userId)) {
+        throw new ServiceError("VOUCHER_ALREADY_USED", "Bạn đã sử dụng mã giảm giá này rồi", 400);
+      }
+
+      // Kiểm tra quyền sử dụng nếu là voucher chỉ định
+      if (!voucher.isPublic) {
+        const isTargeted = voucher.targetUsers?.some(id => id.toString() === userId);
+        if (!isTargeted) {
+          throw new ServiceError("NOT_TARGETED_USER", "Bạn không thuộc đối tượng được sử dụng mã giảm giá này", 403);
+        }
+      }
+
+      if (voucher.minPurchase && subtotal < voucher.minPurchase) {
+        throw new ServiceError(
+          "MIN_PURCHASE_NOT_MET",
+          `Đơn cơm tối thiểu ${voucher.minPurchase.toLocaleString()}đ để dùng mã này`,
+          400
+        );
+      }
+
+      // Tính toán giá trị giảm
+      if (voucher.discountType === "fixed") {
+        discountAmount = voucher.discountValue;
+      } else {
+        discountAmount = (subtotal * voucher.discountValue) / 100;
+        if (voucher.maxDiscount && discountAmount > voucher.maxDiscount) {
+          discountAmount = voucher.maxDiscount;
+        }
+      }
+    }
+
+    const totalPrice = Math.max(0, subtotal - discountAmount);
+
+    // Lấy thông tin user để xem số dư ví tiền
+    const userDoc = await User.findById(userId).select("balance");
+    if (!userDoc) {
+      throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy user", 404);
+    }
+
+    if (userDoc.balance < totalPrice) {
       throw new ServiceError(
-        "NOT_ENOUGH_TURNS",
-        `Bạn chỉ còn ${totalAvailableTurns} lượt, không đủ để đặt ${totalQuantity} phần`,
+        "INSUFFICIENT_BALANCE",
+        `Số dư ví không đủ. Cần ${totalPrice.toLocaleString("vi-VN")} VND, bạn hiện có ${userDoc.balance.toLocaleString("vi-VN")} VND. Vui lòng nạp thêm tiền!`,
         400,
       );
     }
-
-    // Dùng gói đầu tiên làm gói chính cho order (ưu tiên gói mặc định)
-    const userPackage = allPackages[0];
 
     // Kiểm tra đã đặt cơm hôm nay chưa
     const existingOrder = await Order.findOne({
@@ -241,7 +269,9 @@ export const createOrder = async (
 
       // Cập nhật order hiện có (bao gồm cả orderType nếu thay đổi)
       existingOrder.orderType = orderType as any;
-      existingOrder.userPackageId = userPackage._id;
+      existingOrder.totalPrice = totalPrice;
+      existingOrder.voucherCode = voucherCode ? voucherCode.toUpperCase().trim() : "";
+      existingOrder.discountAmount = discountAmount;
       await existingOrder.save();
 
       await OrderItem.deleteMany({ orderId: existingOrder._id });
@@ -281,8 +311,10 @@ export const createOrder = async (
     const order = new Order({
       userId,
       dailyMenuId: menu._id,
-      userPackageId: userPackage._id,
       orderType: orderType as any,
+      totalPrice,
+      voucherCode: voucherCode ? voucherCode.toUpperCase().trim() : "",
+      discountAmount,
       isConfirmed: false,
       orderedAt: new Date(),
     });
@@ -458,7 +490,12 @@ export const confirmAllOrders = async (
 
     let totalItemsConfirmed = 0;
 
-    // Xác nhận và trừ lượt cho từng order
+    // Lấy cấu hình giá từ SystemConfig để dự phòng
+    const config = await SystemConfig.findOne();
+    const priceNormal = config?.priceNormal || 30000;
+    const priceNoRice = config?.priceNoRice || 20000;
+
+    // Xác nhận và trừ tiền cho từng order
     for (const order of orders) {
       // Tính tổng số lượng (quantity) trong order
       const orderItems = (order as any).orderItems || [];
@@ -468,46 +505,25 @@ export const confirmAllOrders = async (
       );
 
       if (itemCount > 0) {
-        // Tìm TẤT CẢ gói khả dụng của user này (sắp hết hạn trước)
-        const userPackages = await UserPackage.find({
-          userId: order.userId,
-          packageType: { $in: [(order as any).orderType || "normal", "coin-exchange"] },
-          isActive: true,
-          remainingTurns: { $gt: 0 },
-          expiresAt: { $gt: new Date() },
-        }).sort({ expiresAt: 1 });
+        // Lấy giá trị đơn đặt cơm (từ thuộc tính totalPrice, hoặc tính toán nếu chưa có)
+        const cost = (order as any).totalPrice || (itemCount * (order.orderType === "no-rice" ? priceNoRice : priceNormal));
+        
+        // Trừ tiền trực tiếp vào ví của người dùng
+        await User.findByIdAndUpdate(order.userId, {
+          $inc: { balance: -cost }
+        });
 
-        // Ưu tiên gói được gắn với order lên đầu
-        const linkedIdx = userPackages.findIndex(
-          (p) => p._id.toString() === order.userPackageId?.toString(),
-        );
-        if (linkedIdx > 0) {
-          const [linkedPkg] = userPackages.splice(linkedIdx, 1);
-          userPackages.unshift(linkedPkg);
-        }
-
-        // Phân bổ trừ lượt từ gói đầu tiên, tràn sang gói tiếp theo
-        let remaining = itemCount;
-        for (const pkg of userPackages) {
-          if (remaining <= 0) break;
-
-          const deduct = Math.min(remaining, pkg.remainingTurns);
-          pkg.remainingTurns -= deduct;
-          remaining -= deduct;
-
-          await pkg.save();
-
-          // Deactivate package nếu hết lượt
-          if (pkg.remainingTurns <= 0) {
-            pkg.isActive = false;
-            await pkg.save();
-
-            // Nếu đây là gói mặc định của user, xóa nó đi
-            const userWithPkg = await User.findById(order.userId).select("activePackageId");
-            if (userWithPkg && userWithPkg.activePackageId?.toString() === pkg._id.toString()) {
-              userWithPkg.activePackageId = undefined;
-              await userWithPkg.save();
+        // Nếu đơn hàng có sử dụng voucher, cập nhật trạng thái voucher
+        if (order.voucherCode) {
+          const voucher = await Voucher.findOne({
+            code: order.voucherCode.toUpperCase().trim(),
+          });
+          if (voucher) {
+            voucher.usedCount += 1;
+            if (!voucher.usedByUsers.some(id => id.toString() === order.userId.toString())) {
+              voucher.usedByUsers.push(order.userId.toString());
             }
+            await voucher.save();
           }
         }
 

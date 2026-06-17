@@ -134,8 +134,11 @@ export const parseMenuText = (
   const items: { name: string; category: string }[] = [];
   let currentCategory = "daily";
 
+  // Chuẩn hóa xuống dòng từ \r\n hoặc \r về \n
+  const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
   // Tách theo dòng
-  const lines = text.split("\n");
+  const lines = normalizedText.split("\n");
 
   for (const line of lines) {
     const trimmedLine = line.trim();

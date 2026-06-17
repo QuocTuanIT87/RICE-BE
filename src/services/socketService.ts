@@ -87,13 +87,13 @@ class SocketService {
     }
 
     // Gửi sự kiện tới Admin
-    public emitToAdmin(event: string, data: any) {
+    public emitToAdmin(event: string, data?: any) {
         console.log(`📡 [Socket] Gửi tới Admin: ${event}`);
         this.io.to("admin_room").emit(event, data);
     }
 
     // Gửi sự kiện tới User cụ thể
-    public emitToUser(userId: string, event: string, data: any) {
+    public emitToUser(userId: string, event: string, data?: any) {
         if (!userId || userId === "null" || userId === "undefined") {
             console.warn(`⚠️ [Socket] Không thể gửi tới User ${userId} (ID không hợp lệ)`);
             return;
@@ -103,7 +103,7 @@ class SocketService {
     }
 
     // Gửi tới tất cả
-    public emitAll(event: string, data: any) {
+    public emitAll(event: string, data?: any) {
         console.log(`📡 [Socket] Gửi tới tất cả: ${event}`);
         this.io.emit(event, data);
     }

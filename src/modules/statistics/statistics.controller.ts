@@ -2,10 +2,9 @@
 import { Request, Response, NextFunction } from "express";
 import { Order } from "../orders/order.model";
 import { OrderItem } from "../orders/orderItem.model";
-import { PackagePurchaseRequest } from "../packagePurchases/packagePurchaseRequest.model";
+import { DepositRequest } from "../depositRequests/depositRequest.model";
 import { DailyMenu } from "../dailyMenus/dailyMenu.model";
 import { User } from "../auth/user.model";
-import { UserPackage } from "../userPackages/userPackage.model";
 import { getStartOfDay, getEndOfDay } from "../../utils";
 
 /**
@@ -43,31 +42,21 @@ export const getRevenue = async (
       endDate = new Date(baseDate.getFullYear(), 11, 31, 23, 59, 59);
     }
 
-    // Lấy các yêu cầu mua gói đã duyệt trong khoảng thời gian
-    const approvedRequests = await PackagePurchaseRequest.find({
+    // Lấy các yêu cầu nạp tiền đã duyệt trong khoảng thời gian
+    const approvedRequests = await DepositRequest.find({
       status: "approved",
       processedAt: { $gte: startDate, $lte: endDate },
-    }).populate("mealPackageId");
+    });
 
     // Tính doanh thu
     let totalRevenue = 0;
-    const revenueByPackage: {
-      [key: string]: { name: string; count: number; revenue: number };
-    } = {};
-
     for (const request of approvedRequests) {
-      const pkg = request.mealPackageId as any;
-      if (!pkg) continue;
-
-      totalRevenue += pkg.price;
-
-      const pkgId = pkg._id.toString();
-      if (!revenueByPackage[pkgId]) {
-        revenueByPackage[pkgId] = { name: pkg.name, count: 0, revenue: 0 };
-      }
-      revenueByPackage[pkgId].count += 1;
-      revenueByPackage[pkgId].revenue += pkg.price;
+      totalRevenue += request.amount;
     }
+
+    const breakdown = [
+      { name: "Nạp tiền ví", count: approvedRequests.length, revenue: totalRevenue }
+    ];
 
     // Tổng số đơn đặt cơm trong khoảng thời gian
     const menus = await DailyMenu.find({
@@ -88,7 +77,7 @@ export const getRevenue = async (
         totalRevenue,
         totalPackagesSold: approvedRequests.length,
         totalOrders,
-        breakdown: Object.values(revenueByPackage),
+        breakdown,
       },
     });
   } catch (error) {
@@ -183,11 +172,9 @@ export const getDashboard = async (
     // Tổng số người dùng
     const totalUsers = await User.countDocuments();
 
-    // Số gói đang hoạt động
-    const activePackages = await UserPackage.countDocuments({
-      isActive: true,
-      expiresAt: { $gt: today },
-      remainingTurns: { $gt: 0 },
+    // Số tài khoản có số dư khả dụng (thay thế cho activePackages để tránh vỡ frontend)
+    const activePackages = await User.countDocuments({
+      balance: { $gt: 0 },
     });
 
     // Số menu hôm nay
@@ -204,21 +191,20 @@ export const getDashboard = async (
       dailyMenuId: { $in: todayMenuIds },
     });
 
-    // Yêu cầu mua gói pending
-    const pendingRequests = await PackagePurchaseRequest.countDocuments({
+    // Yêu cầu nạp tiền pending
+    const pendingRequests = await DepositRequest.countDocuments({
       status: "pending",
     });
 
     // Doanh thu tháng này
-    const monthlyRequests = await PackagePurchaseRequest.find({
+    const monthlyRequests = await DepositRequest.find({
       status: "approved",
       processedAt: { $gte: startOfMonth, $lte: endOfToday },
-    }).populate("mealPackageId");
+    });
 
     let monthlyRevenue = 0;
     for (const req of monthlyRequests) {
-      const pkg = req.mealPackageId as any;
-      if (pkg) monthlyRevenue += pkg.price;
+      monthlyRevenue += req.amount;
     }
 
     // Top món ăn trong tháng

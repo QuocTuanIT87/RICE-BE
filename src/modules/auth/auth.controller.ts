@@ -257,7 +257,7 @@ export const getMe = async (
 ): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
-    const user = await User.findById(userId).populate("activePackageId");
+    const user = await User.findById(userId);
     if (!user) {
       throw Errors.USER_NOT_FOUND;
     }
@@ -272,7 +272,7 @@ export const getMe = async (
         role: user.role,
         isVerified: user.isVerified,
         gameCoins: user.gameCoins,
-        activePackage: user.activePackageId,
+        balance: user.balance,
         createdAt: user.createdAt,
       },
     });

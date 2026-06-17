@@ -4,6 +4,7 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IVoucher {
   code: string;
   description: string;
+  voucherType: "deposit" | "order"; // Phân loại: nạp tiền hay đặt cơm
   discountType: "fixed" | "percentage";
   discountValue: number;
   minPurchase?: number;
@@ -32,6 +33,12 @@ const voucherSchema = new Schema<IVoucherDocument>(
     description: {
       type: String,
       required: [true, "Mô tả là bắt buộc"],
+    },
+    voucherType: {
+      type: String,
+      enum: ["deposit", "order"],
+      default: "order",
+      required: true,
     },
     discountType: {
       type: String,

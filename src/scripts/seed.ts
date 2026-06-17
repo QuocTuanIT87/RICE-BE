@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { env } from "../config";
 import { User } from "../modules/auth/user.model";
-import { MealPackage } from "../modules/mealPackages/mealPackage.model";
 
 const seed = async () => {
   try {
@@ -61,93 +60,6 @@ const seed = async () => {
       console.log("   Password: khach123");
     } else {
       console.log("ℹ️ Tài khoản Khách hàng đã tồn tại");
-    }
-
-    // =============================================
-    // Tạo các gói đặt cơm mẫu (nếu chưa có)
-    // =============================================
-    const existingPackages = await MealPackage.countDocuments();
-
-    if (existingPackages === 0) {
-      const packages = [
-        // Gói bình thường (có cơm) - 30k/lượt
-        {
-          name: "Gói 1 lượt",
-          turns: 1,
-          price: 35000,
-          validDays: 7,
-          packageType: "normal",
-        },
-        {
-          name: "Gói 3 lượt",
-          turns: 3,
-          price: 100000,
-          validDays: 14,
-          packageType: "normal",
-        },
-        {
-          name: "Gói 5 lượt",
-          turns: 5,
-          price: 160000,
-          validDays: 21,
-          packageType: "normal",
-        },
-        {
-          name: "Gói 7 lượt",
-          turns: 7,
-          price: 220000,
-          validDays: 30,
-          packageType: "normal",
-        },
-        {
-          name: "Gói 10 lượt",
-          turns: 10,
-          price: 300000,
-          validDays: 45,
-          packageType: "normal",
-        },
-        // Gói không cơm - 20k/lượt
-        {
-          name: "Gói 1 lượt (Không cơm)",
-          turns: 1,
-          price: 20000,
-          validDays: 7,
-          packageType: "no-rice",
-        },
-        {
-          name: "Gói 3 lượt (Không cơm)",
-          turns: 3,
-          price: 55000,
-          validDays: 14,
-          packageType: "no-rice",
-        },
-        {
-          name: "Gói 5 lượt (Không cơm)",
-          turns: 5,
-          price: 90000,
-          validDays: 21,
-          packageType: "no-rice",
-        },
-        {
-          name: "Gói 7 lượt (Không cơm)",
-          turns: 7,
-          price: 125000,
-          validDays: 30,
-          packageType: "no-rice",
-        },
-        {
-          name: "Gói 10 lượt (Không cơm)",
-          turns: 10,
-          price: 175000,
-          validDays: 45,
-          packageType: "no-rice",
-        },
-      ];
-
-      await MealPackage.insertMany(packages);
-      console.log("✅ Đã tạo 10 gói đặt cơm mẫu (5 bình thường + 5 không cơm)");
-    } else {
-      console.log("ℹ️ Các gói đặt cơm đã tồn tại");
     }
 
     console.log("\n🎉 Seed hoàn tất!");

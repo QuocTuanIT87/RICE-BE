@@ -1,8 +1,6 @@
 // GameCoins Controller - Quản lý xu chơi game
 import { Request, Response, NextFunction } from "express";
 import { User, IUserDocument } from "../auth/user.model";
-import { UserPackage } from "../userPackages/userPackage.model";
-import { MealPackage } from "../mealPackages/mealPackage.model";
 import { ServiceError } from "../../middlewares";
 import { socketService } from "../../services";
 
@@ -89,8 +87,8 @@ export const updateCoins = async (
 
 /**
  * POST /api/game-coins/exchange
- * Đổi xu thành lượt đặt cơm
- * Body: { packageId: string }
+ * Đổi xu thành số dư ví
+ * Body: { turns: number }
  */
 export const exchangeCoins = async (
     req: Request,
@@ -98,26 +96,14 @@ export const exchangeCoins = async (
     next: NextFunction,
 ): Promise<void> => {
     try {
-        const { packageId } = req.body;
+        const { turns = 1 } = req.body;
 
-        if (!packageId) {
-            throw new ServiceError("PACKAGE_REQUIRED", "PackageId là bắt buộc", 400);
+        if (typeof turns !== "number" || !Number.isInteger(turns) || turns <= 0) {
+            throw new ServiceError("INVALID_TURNS", "Số lượt đổi không hợp lệ", 400);
         }
 
-        // Tìm gói đổi xu
-        const pkg = await MealPackage.findById(packageId);
-        if (!pkg) {
-            throw new ServiceError("PACKAGE_NOT_FOUND", "Không tìm thấy gói này", 404);
-        }
-
-        if (pkg.packageType !== "coin-exchange") {
-            throw new ServiceError("INVALID_PACKAGE_TYPE", "Gói này không phải loại đổi xu", 400);
-        }
-
-        const coinsNeeded = pkg.coinPrice || 0;
-        if (coinsNeeded <= 0) {
-            throw new ServiceError("INVALID_COIN_PRICE", "Gói này chưa có giá xu hợp lệ", 400);
-        }
+        const coinsNeeded = turns * 100_000;
+        const creditAmount = turns * 30_000;
 
         const user = (await User.findById(req.user!.userId)) as IUserDocument | null;
         if (!user) {
@@ -133,43 +119,23 @@ export const exchangeCoins = async (
             );
         }
 
-        // Trừ xu
+        // Trừ xu và cộng số dư ví
         user.gameCoins = currentCoins - coinsNeeded;
+        user.balance = (user.balance || 0) + creditAmount;
         await user.save();
 
-        // Tạo UserPackage mới loại coin-exchange
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + (pkg.validDays || 30));
-
-        const userPackage = new UserPackage({
-            userId: user._id,
-            mealPackageId: pkg._id,
-            packageType: "coin-exchange",
-            remainingTurns: pkg.turns,
-            purchasedAt: new Date(),
-            expiresAt,
-            isActive: true,
-        });
-
-        await userPackage.save();
-
-        // Nếu user chưa có activePackage, set gói mới
-        if (!user.activePackageId) {
-            user.activePackageId = userPackage._id;
-            await user.save();
-        }
-
-        // Phát tín hiệu cập nhật xu real-time
+        // Phát tín hiệu cập nhật xu & số dư real-time
         socketService.emitToUser(user._id.toString(), "coins_updated", {
-            gameCoins: user.gameCoins
+            gameCoins: user.gameCoins,
+            balance: user.balance,
         });
 
         res.json({
             success: true,
-            message: `Đổi thành công ${pkg.turns} lượt đặt cơm!`,
+            message: `Đổi thành công ${turns} lượt, cộng ${creditAmount.toLocaleString("vi-VN")} VND vào ví!`,
             data: {
                 gameCoins: user.gameCoins,
-                userPackage,
+                balance: user.balance,
             },
         });
     } catch (error) {

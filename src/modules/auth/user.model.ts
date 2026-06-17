@@ -57,15 +57,15 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       select: false,
     },
-    activePackageId: {
-      type: Schema.Types.ObjectId,
-      ref: "UserPackage",
-      default: null,
-    },
     gameCoins: {
       type: Number,
       default: 0,
       min: [0, "Xu không được âm"],
+    },
+    balance: {
+      type: Number,
+      default: 0,
+      min: [0, "Số dư tài khoản không được âm"],
     },
   },
   {

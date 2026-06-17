@@ -88,26 +88,26 @@ export const sendPackagePurchaseSuccessEmail = async (
     const mailOptions = {
       from: `"Web Đặt Cơm" <${env.EMAIL_USER}>`,
       to,
-      subject: "🎉 Mua Gói Đặt Cơm Thành Công - Web Đặt Cơm",
+      subject: "🎉 Nạp Tiền Vào Ví Thành Công - Web Đặt Cơm",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0;">🎉 Mua Gói Thành Công!</h1>
+            <h1 style="color: white; margin: 0;">🎉 Nạp Tiền Thành Công!</h1>
           </div>
           <div style="padding: 30px; background: #f9f9f9;">
             <h2 style="color: #333;">Xin chào ${name}! 👋</h2>
             <p style="color: #666; font-size: 16px;">
-              Chúc mừng bạn đã mua gói đặt cơm thành công!
+              Yêu cầu nạp tiền vào ví của bạn đã được Admin phê duyệt thành công!
             </p>
             <div style="background: white; padding: 20px; border-radius: 10px; border-left: 4px solid #11998e;">
-              <p style="margin: 10px 0;"><strong>📦 Tên gói:</strong> ${packageName}</p>
-              <p style="margin: 10px 0;"><strong>🎟️ Số lượt:</strong> ${turns} lượt</p>
-              <p style="margin: 10px 0;"><strong>💰 Giá:</strong> ${formattedPrice} VND</p>
-              <p style="margin: 10px 0;"><strong>🪙 Thưởng:</strong> <span style="color: #f59e0b; font-weight: bold;">+${bonusCoins.toLocaleString()} Xu</span></p>
+              <p style="margin: 10px 0;"><strong>📦 Tên gói nạp:</strong> ${packageName}</p>
+              <p style="margin: 10px 0;"><strong>💳 Số tiền cộng ví:</strong> ${turns.toLocaleString("vi-VN")} VND</p>
+              <p style="margin: 10px 0;"><strong>💰 Giá thanh toán:</strong> ${formattedPrice} VND</p>
+              <p style="margin: 10px 0;"><strong>🪙 Thưởng game:</strong> <span style="color: #f59e0b; font-weight: bold;">+${bonusCoins.toLocaleString()} Xu</span></p>
               <p style="margin: 10px 0;"><strong>🕐 Thời gian:</strong> ${formattedTime}</p>
             </div>
             <p style="color: #666; font-size: 14px; margin-top: 20px;">
-              Bạn có thể vào phần <strong>Trang cá nhân</strong> để xem các gói đặt cơm đang khả dụng.
+              Bạn có thể vào phần <strong>Ví của tôi</strong> để kiểm tra số dư hiện tại.
             </p>
           </div>
           <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">

@@ -9,6 +9,11 @@ export interface ISystemConfig extends Document {
   websiteLogo?: string;
   websiteBanner?: string;
   contactPhone?: string;
+  priceNormal: number;
+  priceNoRice: number;
+  bankId: string;
+  bankAccountNo: string;
+  bankAccountName: string;
 }
 
 const SystemConfigSchema: Schema = new Schema(
@@ -21,6 +26,11 @@ const SystemConfigSchema: Schema = new Schema(
     websiteLogo: { type: String, default: "/logo.png" },
     websiteBanner: { type: String, default: "/banner.png" },
     contactPhone: { type: String, default: "0123.456.789" },
+    priceNormal: { type: Number, default: 30000 },
+    priceNoRice: { type: Number, default: 20000 },
+    bankId: { type: String, default: "MB" },
+    bankAccountNo: { type: String, default: "0999999999" },
+    bankAccountName: { type: String, default: "NGUYEN VAN A" },
   },
   { timestamps: true }
 );

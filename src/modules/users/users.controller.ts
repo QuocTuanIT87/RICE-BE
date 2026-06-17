@@ -1,9 +1,10 @@
 // Users Controller - Quản lý người dùng (Admin)
 import { Request, Response, NextFunction } from "express";
 import { User } from "../auth/user.model";
-import { UserPackage } from "../userPackages/userPackage.model";
 import { Order } from "../orders/order.model";
+import { DepositRequest } from "../depositRequests/depositRequest.model";
 import { ServiceError } from "../../middlewares";
+import { socketService } from "../../services";
 
 /**
  * GET /api/users
@@ -68,8 +69,7 @@ export const getUserById = async (
 ): Promise<void> => {
   try {
     const user = await User.findById(req.params.id)
-      .select("-password")
-      .populate("activePackageId");
+      .select("-password");
 
     if (!user) {
       throw new ServiceError(
@@ -79,10 +79,9 @@ export const getUserById = async (
       );
     }
 
-    // Lấy danh sách gói đã mua
-    const packages = await UserPackage.find({ userId: user._id })
-      .populate("mealPackageId")
-      .sort({ purchasedAt: -1 });
+    // Lấy lịch sử yêu cầu nạp tiền
+    const packages = await DepositRequest.find({ userId: user._id })
+      .sort({ requestedAt: -1 });
 
     // Lấy danh sách đơn hàng đã đặt
     const orders = await Order.find({ userId: user._id })
@@ -234,61 +233,23 @@ export const getLeaderboard = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const topUsers = await UserPackage.aggregate([
-      // Lọc các gói đang active và chưa hết hạn
-      {
-        $match: {
-          isActive: true,
-          expiresAt: { $gt: new Date() },
-          remainingTurns: { $gt: 0 },
-        },
-      },
-      // Group theo userId và tính tổng lượt
-      {
-        $group: {
-          _id: "$userId",
-          totalTurns: { $sum: "$remainingTurns" },
-          packageCount: { $sum: 1 },
-        },
-      },
-      // Sắp xếp giảm dần theo tổng lượt
-      {
-        $sort: { totalTurns: -1 },
-      },
-      // Giới hạn top 10
-      {
-        $limit: 10,
-      },
-      // Join với collection users để lấy thông tin
-      {
-        $lookup: {
-          from: "users",
-          localField: "_id",
-          foreignField: "_id",
-          as: "userInfo",
-        },
-      },
-      // Unwind userInfo array
-      {
-        $unwind: "$userInfo",
-      },
-      // Project ra các trường cần thiết
-      {
-        $project: {
-          _id: 1,
-          totalTurns: 1,
-          packageCount: 1,
-          name: "$userInfo.name",
-          gameCoins: "$userInfo.gameCoins",
-          // Mặc định avatar nếu có
-          avatar: "$userInfo.avatar",
-        },
-      },
-    ]);
+    const topUsers = await User.find({ role: { $ne: "admin" } })
+      .select("name avatar balance gameCoins")
+      .sort({ balance: -1 })
+      .limit(10);
+
+    // Format matching the expected properties in frontend
+    const formattedUsers = topUsers.map(u => ({
+      _id: u._id,
+      name: u.name,
+      avatar: (u as any).avatar,
+      gameCoins: u.gameCoins,
+      totalTurns: u.balance, // reuse totalTurns property as balance to avoid breaking frontend leaderboard
+    }));
 
     res.json({
       success: true,
-      data: topUsers,
+      data: formattedUsers,
     });
   } catch (error) {
     next(error);
@@ -369,6 +330,44 @@ export const getTopOrders = async (
     res.json({
       success: true,
       data: topUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/users/:id/balance
+ * Điều chỉnh số dư của user (Admin)
+ */
+export const updateUserBalance = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { balance } = req.body;
+    if (balance === undefined || typeof balance !== "number" || balance < 0) {
+      throw new ServiceError("INVALID_BALANCE", "Số dư không hợp lệ", 400);
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy người dùng", 404);
+    }
+
+    user.balance = balance;
+    await user.save();
+
+    // Phát tín hiệu cập nhật ví tiền real-time
+    socketService.emitToUser(user._id.toString(), "coins_updated", {
+      balance: user.balance,
+    });
+
+    res.json({
+      success: true,
+      message: `Đã cập nhật số dư ví của ${user.name} thành ${balance.toLocaleString("vi-VN")} VND`,
+      data: user,
     });
   } catch (error) {
     next(error);

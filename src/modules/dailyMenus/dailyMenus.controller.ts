@@ -2,6 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { DailyMenu } from "./dailyMenu.model";
 import { MenuItem } from "../menuItems/menuItem.model";
+import { OrderItem } from "../orders/orderItem.model";
 import { ServiceError } from "../../middlewares";
 import {
   parseMenuText,
@@ -64,7 +65,9 @@ export const getTodayMenu = async (
 
     const menus = await DailyMenu.find({
       menuDate: { $gte: startOfDay, $lte: endOfDay },
-    }).populate("menuItems");
+    })
+      .populate("menuItems")
+      .sort({ isLocked: 1, createdAt: -1 });
 
     if (menus.length === 0) {
       res.json({
@@ -236,7 +239,7 @@ export const updateDailyMenu = async (
       const newParsedItems = parseMenuText(rawContent);
 
       // Danh sách ID món ăn mới cho menu
-      const newMenuItemIds = [];
+      const newMenuItemIds: any[] = [];
 
       // Xử lý từng món trong nội dung mới
       for (const newItem of newParsedItems) {
@@ -258,6 +261,23 @@ export const updateDailyMenu = async (
             category: newItem.category as any
           });
           newMenuItemIds.push(createdItem._id);
+        }
+      }
+
+      // Xử lý các món cũ không còn trong text mới
+      const removedItems = existingItems.filter(
+        (item) => !newMenuItemIds.some((id) => id.toString() === item._id.toString()),
+      );
+      for (const removedItem of removedItems) {
+        // Kiểm tra xem món này đã có ai đặt chưa
+        const isOrdered = await OrderItem.exists({ menuItemId: removedItem._id });
+        if (isOrdered) {
+          // Nếu đã được đặt, không xóa để tránh lỗi order history, nhưng đổi dailyMenuId thành null để không xuất hiện trong virtual populate
+          (removedItem as any).dailyMenuId = null;
+          await removedItem.save();
+        } else {
+          // Nếu chưa được đặt, xóa hẳn khỏi DB
+          await removedItem.deleteOne();
         }
       }
 

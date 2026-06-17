@@ -136,7 +136,7 @@ export const checkVoucher = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { code, amount } = req.body;
+    const { code, amount, voucherType } = req.body;
 
     if (!code) {
       throw new ServiceError("CODE_REQUIRED", "Vui lòng nhập mã voucher", 400);
@@ -149,6 +149,15 @@ export const checkVoucher = async (
 
     if (!voucher) {
       throw new ServiceError("INVALID_VOUCHER", "Mã voucher không tồn tại hoặc đã hết hiệu lực", 404);
+    }
+
+    if (voucherType && voucher.voucherType !== voucherType) {
+      const typeText = voucher.voucherType === "deposit" ? "nạp tiền" : "đặt cơm";
+      throw new ServiceError(
+        "INVALID_VOUCHER_TYPE",
+        `Mã này là voucher ${typeText}, không thể sử dụng cho giao dịch này.`,
+        400
+      );
     }
 
     const now = new Date();
@@ -218,15 +227,10 @@ export const getMyVouchers = async (
 ): Promise<void> => {
   try {
     const userId = req.user!.userId;
+    const { voucherType } = req.query;
     const now = new Date();
 
-    // Tìm các voucher:
-    // 1. Đang hoạt động
-    // 2. Chưa hết hạn
-    // 3. Chưa dùng hết lượt
-    // 4. (Là công khai) HOẶC (User có trong targetUsers)
-    // 5. User chưa dùng mã này
-    const vouchers = await Voucher.find({
+    const query: any = {
       isActive: true,
       validTo: { $gte: now },
       $expr: { $lt: ["$usedCount", "$usageLimit"] },
@@ -235,7 +239,13 @@ export const getMyVouchers = async (
         { isPublic: true },
         { targetUsers: userId }
       ]
-    }).sort({ validTo: 1 });
+    };
+
+    if (voucherType) {
+      query.voucherType = voucherType;
+    }
+
+    const vouchers = await Voucher.find(query).sort({ validTo: 1 });
 
     res.json({
       success: true,

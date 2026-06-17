@@ -10,9 +10,7 @@ import { socketService } from "./services/socketService";
 // Import routes
 import { authRoutes } from "./modules/auth";
 import { usersRoutes } from "./modules/users";
-import { mealPackagesRoutes } from "./modules/mealPackages";
-import { packagePurchasesRoutes } from "./modules/packagePurchases";
-import { userPackagesRoutes } from "./modules/userPackages";
+import { depositRequestsRoutes } from "./modules/depositRequests";
 import { dailyMenusRoutes } from "./modules/dailyMenus";
 import { ordersRoutes } from "./modules/orders";
 import { statisticsRoutes } from "./modules/statistics";
@@ -75,9 +73,7 @@ app.use(maintenanceMiddleware);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", usersRoutes);
-app.use("/api/meal-packages", mealPackagesRoutes);
-app.use("/api/package-purchases", packagePurchasesRoutes);
-app.use("/api/user-packages", userPackagesRoutes);
+app.use("/api/deposit-requests", depositRequestsRoutes);
 app.use("/api/daily-menus", dailyMenusRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/statistics", statisticsRoutes);

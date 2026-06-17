@@ -18,15 +18,24 @@ const orderSchema = new Schema<IOrderDocument>(
       ref: "DailyMenu",
       required: [true, "Daily Menu ID là bắt buộc"],
     },
-    userPackageId: {
-      type: Schema.Types.ObjectId,
-      ref: "UserPackage",
-      required: [true, "User Package ID là bắt buộc"],
-    },
     orderType: {
       type: String,
       enum: ["normal", "no-rice"],
       default: "normal",
+    },
+    totalPrice: {
+      type: Number,
+      default: 0,
+      min: [0, "Tổng tiền không được âm"],
+    },
+    voucherCode: {
+      type: String,
+      default: "",
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: [0, "Số tiền giảm không được âm"],
     },
     isConfirmed: {
       type: Boolean,
