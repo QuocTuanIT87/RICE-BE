@@ -178,9 +178,15 @@ export const createOrder = async (
     );
 
     const subtotal = totalQuantity * (orderType === "no-rice" ? priceNoRice : priceNormal);
+    // Tìm kiếm đơn đặt cơm hiện có của người dùng cho ngày hôm nay để tính toán
+    const existingOrder = await Order.findOne({
+      userId,
+      dailyMenuId: menu._id,
+    });
 
     // Xử lý áp dụng voucher giảm giá
     let discountAmount = 0;
+    let appliedVoucherDoc = null;
     if (voucherCode) {
       const voucher = await Voucher.findOne({
         code: voucherCode.toUpperCase().trim(),
@@ -200,11 +206,13 @@ export const createOrder = async (
         throw new ServiceError("VOUCHER_EXPIRED", "Mã voucher đã hết hạn sử dụng", 400);
       }
 
-      if (voucher.usedCount >= voucher.usageLimit) {
+      const isSameVoucherOnExistingOrder = existingOrder && existingOrder.voucherCode?.toUpperCase().trim() === voucher.code.toUpperCase().trim();
+
+      if (!isSameVoucherOnExistingOrder && voucher.usedCount >= voucher.usageLimit) {
         throw new ServiceError("VOUCHER_LIMIT_REACHED", "Mã voucher đã hết lượt sử dụng", 400);
       }
 
-      if (voucher.usedByUsers.some(id => id.toString() === userId)) {
+      if (!isSameVoucherOnExistingOrder && voucher.usedByUsers.some(id => id.toString() === userId)) {
         throw new ServiceError("VOUCHER_ALREADY_USED", "Bạn đã sử dụng mã giảm giá này rồi", 400);
       }
 
@@ -233,50 +241,72 @@ export const createOrder = async (
           discountAmount = voucher.maxDiscount;
         }
       }
+      appliedVoucherDoc = voucher;
     }
 
     const totalPrice = Math.max(0, subtotal - discountAmount);
 
+    // Lấy thông tin đơn hàng cũ để tính độ lệch giá trị
+    const oldPrice = existingOrder ? (existingOrder.totalPrice ?? 0) : 0;
+    const diffPrice = totalPrice - oldPrice;
+
     // Lấy thông tin user để xem số dư ví tiền
-    const userDoc = await User.findById(userId).select("balance");
+    const userDoc = await User.findById(userId);
     if (!userDoc) {
       throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy user", 404);
     }
 
-    if (userDoc.balance < totalPrice) {
+    // Nếu phải đóng thêm tiền chênh lệch, kiểm tra số dư ví
+    if (diffPrice > 0 && userDoc.balance < diffPrice) {
       throw new ServiceError(
         "INSUFFICIENT_BALANCE",
-        `Số dư ví không đủ. Cần ${totalPrice.toLocaleString("vi-VN")} VND, bạn hiện có ${userDoc.balance.toLocaleString("vi-VN")} VND. Vui lòng nạp thêm tiền!`,
+        `Số dư ví không đủ. Cần thêm ${diffPrice.toLocaleString("vi-VN")} VND để nâng cấp đơn cơm. Bạn hiện có ${userDoc.balance.toLocaleString("vi-VN")} VND. Vui lòng nạp thêm tiền!`,
         400,
       );
     }
 
-    // Kiểm tra đã đặt cơm hôm nay chưa
-    const existingOrder = await Order.findOne({
-      userId,
-      dailyMenuId: menu._id,
-    });
+    // Thực hiện trừ/hoàn tiền trực tiếp vào ví
+    if (diffPrice !== 0) {
+      userDoc.balance -= diffPrice;
+      await userDoc.save();
+    }
+
+    // Xử lý thu hồi voucher cũ nếu người dùng đổi voucher hoặc xóa voucher
+    if (existingOrder && existingOrder.voucherCode && existingOrder.voucherCode.toUpperCase().trim() !== (voucherCode ? voucherCode.toUpperCase().trim() : "")) {
+      const oldVoucher = await Voucher.findOne({
+        code: existingOrder.voucherCode.toUpperCase().trim(),
+      });
+      if (oldVoucher) {
+        oldVoucher.usedCount = Math.max(0, oldVoucher.usedCount - 1);
+        oldVoucher.usedByUsers = oldVoucher.usedByUsers.filter(id => id.toString() !== userId);
+        await oldVoucher.save();
+      }
+    }
+
+    // Xử lý áp dụng voucher mới (nếu chưa được áp dụng trước đó cho đơn này)
+    if (appliedVoucherDoc) {
+      const isSameVoucherOnExistingOrder = existingOrder && existingOrder.voucherCode?.toUpperCase().trim() === appliedVoucherDoc.code.toUpperCase().trim();
+      if (!isSameVoucherOnExistingOrder) {
+        appliedVoucherDoc.usedCount += 1;
+        if (!appliedVoucherDoc.usedByUsers.some(id => id.toString() === userId)) {
+          appliedVoucherDoc.usedByUsers.push(userId);
+        }
+        await appliedVoucherDoc.save();
+      }
+    }
 
     if (existingOrder) {
-      // KHÔNG cho phép cập nhật nếu đơn hàng đã được admin xác nhận
-      if (existingOrder.isConfirmed) {
-        throw new ServiceError(
-          "ORDER_ALREADY_CONFIRMED",
-          "Đơn hàng đã được admin xác nhận, không thể thay đổi nữa",
-          400,
-        );
-      }
-
-      // Cập nhật order hiện có (bao gồm cả orderType nếu thay đổi)
+      // Cập nhật đơn hàng hiện có
       existingOrder.orderType = orderType as any;
       existingOrder.totalPrice = totalPrice;
       existingOrder.voucherCode = voucherCode ? voucherCode.toUpperCase().trim() : "";
       existingOrder.discountAmount = discountAmount;
+      existingOrder.isConfirmed = true; // Đã thanh toán
       await existingOrder.save();
 
       await OrderItem.deleteMany({ orderId: existingOrder._id });
 
-      // Tạo các order items mới với ghi chú và số lượng
+      // Tạo các order items mới
       if (items && items.length > 0) {
         await OrderItem.insertMany(
           items.map((item: { menuItemId: string; note?: string; quantity?: number }) => ({
@@ -307,7 +337,7 @@ export const createOrder = async (
       return;
     }
 
-    // Tạo đơn hàng mới
+    // Tạo đơn hàng mới (ở trạng thái đã xác nhận/thanh toán ngay)
     const order = new Order({
       userId,
       dailyMenuId: menu._id,
@@ -315,12 +345,12 @@ export const createOrder = async (
       totalPrice,
       voucherCode: voucherCode ? voucherCode.toUpperCase().trim() : "",
       discountAmount,
-      isConfirmed: false,
+      isConfirmed: true, // Thanh toán tức thì thành công
       orderedAt: new Date(),
     });
     await order.save();
 
-    // Tạo các order items với ghi chú và số lượng
+    // Tạo các order items mới
     if (items && items.length > 0) {
       await OrderItem.insertMany(
         items.map((item: { menuItemId: string; note?: string; quantity?: number }) => ({
@@ -339,7 +369,7 @@ export const createOrder = async (
 
     res.status(201).json({
       success: true,
-      message: "Đặt cơm thành công!",
+      message: "Đặt cơm và thanh toán thành công!",
       data: createdOrder,
     });
 
@@ -482,64 +512,11 @@ export const confirmAllOrders = async (
       throw new ServiceError("MENU_NOT_FOUND", "Không tìm thấy menu", 404);
     }
 
-    // Lấy tất cả orders chưa confirm với order items
-    const orders = await Order.find({
-      dailyMenuId: menuId,
-      isConfirmed: false,
-    }).populate("orderItems");
-
-    let totalItemsConfirmed = 0;
-
-    // Lấy cấu hình giá từ SystemConfig để dự phòng
-    const config = await SystemConfig.findOne();
-    const priceNormal = config?.priceNormal || 30000;
-    const priceNoRice = config?.priceNoRice || 20000;
-
-    // Xác nhận và trừ tiền cho từng order
-    for (const order of orders) {
-      // Tính tổng số lượng (quantity) trong order
-      const orderItems = (order as any).orderItems || [];
-      const itemCount = orderItems.reduce(
-        (sum: number, item: any) => sum + (item.quantity || 1),
-        0,
-      );
-
-      if (itemCount > 0) {
-        // Lấy giá trị đơn đặt cơm (từ thuộc tính totalPrice, hoặc tính toán nếu chưa có)
-        const cost = (order as any).totalPrice || (itemCount * (order.orderType === "no-rice" ? priceNoRice : priceNormal));
-        
-        // Trừ tiền trực tiếp vào ví của người dùng
-        await User.findByIdAndUpdate(order.userId, {
-          $inc: { balance: -cost }
-        });
-
-        // Nếu đơn hàng có sử dụng voucher, cập nhật trạng thái voucher
-        if (order.voucherCode) {
-          const voucher = await Voucher.findOne({
-            code: order.voucherCode.toUpperCase().trim(),
-          });
-          if (voucher) {
-            voucher.usedCount += 1;
-            if (!voucher.usedByUsers.some(id => id.toString() === order.userId.toString())) {
-              voucher.usedByUsers.push(order.userId.toString());
-            }
-            await voucher.save();
-          }
-        }
-
-        totalItemsConfirmed += itemCount;
-      }
-
-      // Đánh dấu đã confirm
-      order.isConfirmed = true;
-      await order.save();
-
-      // Thông báo cho từng user (optional but nice)
-      socketService.emitToUser(order.userId.toString(), "order_confirmed", {
-        orderId: order._id,
-        menuId: menuId,
-      });
-    }
+    // Cập nhật hàng loạt tất cả đơn đặt cơm của menu này sang trạng thái đã xác nhận (isConfirmed = true)
+    await Order.updateMany(
+      { dailyMenuId: menuId, isConfirmed: false },
+      { $set: { isConfirmed: true } }
+    );
 
     // Khóa menu và thông báo cho mọi người
     menu.isLocked = true;
@@ -552,11 +529,7 @@ export const confirmAllOrders = async (
 
     res.json({
       success: true,
-      message: `Đã xác nhận ${orders.length} đơn hàng (${totalItemsConfirmed} món)!`,
-      data: {
-        confirmedCount: orders.length,
-        totalItems: totalItemsConfirmed,
-      },
+      message: `Đã chốt và khóa thực đơn thành công!`,
     });
   } catch (error) {
     next(error);
@@ -700,13 +673,38 @@ export const deleteOrder = async (
       throw new ServiceError("FORBIDDEN", "Bạn không có quyền xóa đơn hàng này", 403);
     }
 
-    // Không cho phép xóa nếu đã confirmed
-    if (order.isConfirmed) {
+    // Kiểm tra xem menu hôm nay đã bị khóa chưa
+    const menu = await DailyMenu.findById(order.dailyMenuId);
+    if (!menu) {
+      throw new ServiceError("MENU_NOT_FOUND", "Không tìm thấy thực đơn tương ứng", 404);
+    }
+
+    if (menu.isLocked) {
       throw new ServiceError(
-        "ORDER_ALREADY_CONFIRMED",
-        "Đơn hàng đã được xác nhận, không thể hủy",
+        "MENU_LOCKED",
+        "Thực đơn đã bị khóa, không thể hủy đơn cơm lúc này",
         400,
       );
+    }
+
+    // Hoàn tiền đặt cơm vào ví của khách hàng
+    const refundAmount = order.totalPrice ?? 0;
+    if (refundAmount > 0) {
+      await User.findByIdAndUpdate(order.userId, {
+        $inc: { balance: refundAmount }
+      });
+    }
+
+    // Khôi phục mã giảm giá (nếu có dùng)
+    if (order.voucherCode) {
+      const voucher = await Voucher.findOne({
+        code: order.voucherCode.toUpperCase().trim()
+      });
+      if (voucher) {
+        voucher.usedCount = Math.max(0, voucher.usedCount - 1);
+        voucher.usedByUsers = voucher.usedByUsers.filter(id => id.toString() !== order.userId.toString());
+        await voucher.save();
+      }
     }
 
     // Xóa order items trước
