@@ -617,7 +617,7 @@ export const getCopyText = async (
     // Format text: Tổng số phần + Chi tiết từng đơn
     const totalMeals = totalNormalMeals + totalNoRiceMeals;
     const copyTextParts = [
-      `📋 TỔNG HỢP: ${totalMeals} phần (${orders.length} người)`,
+      `📋 TỔNG HỢP: ${totalMeals} phần`,
       `   🍚 Có cơm: ${totalNormalMeals} phần`,
       `   🥢 Không cơm: ${totalNoRiceMeals} phần`,
       "",
@@ -709,7 +709,7 @@ export const deleteOrder = async (
 
     // Xóa order items trước
     await OrderItem.deleteMany({ orderId: order._id });
-    
+
     // Xóa order
     await order.deleteOne();
 
