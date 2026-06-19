@@ -469,7 +469,7 @@ export const getOrdersByDate = async (
 
     // Lấy tất cả orders của menu này để tính summary
     const allOrders = await Order.find({ dailyMenuId: menu._id })
-      .populate("userId", "name email")
+      .populate("userId", "name email avatar")
       .populate({
         path: "orderItems",
         populate: { path: "menuItemId" },
@@ -501,7 +501,7 @@ export const getOrdersByDate = async (
 
     const [paginatedOrders, total] = await Promise.all([
       Order.find({ dailyMenuId: menu._id })
-        .populate("userId", "name email")
+        .populate("userId", "name email avatar")
         .populate({
           path: "orderItems",
           populate: { path: "menuItemId" },

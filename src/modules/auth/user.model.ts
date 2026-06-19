@@ -30,6 +30,10 @@ const userSchema = new Schema<IUserDocument>(
       trim: true,
       default: "",
     },
+    avatar: {
+      type: String,
+      default: "",
+    },
     password: {
       type: String,
       required: [true, "Mật khẩu là bắt buộc"],

@@ -14,6 +14,7 @@ export interface IUser {
   email: string;
   password: string;
   phone?: string; // Số điện thoại (tùy chọn)
+  avatar?: string; // Ảnh đại diện của người dùng (tùy chọn)
   role: UserRole;
   isVerified: boolean; // Đã xác thực email chưa
   isBlocked: boolean; // Bị khóa tài khoản không

@@ -3,3 +3,4 @@ export { auth, adminOnly, softAuth } from "./auth";
 export { errorHandler } from "./errorHandler";
 export { ServiceError, Errors } from "./errors";
 export { licenseMiddleware } from "./license";
+export { upload } from "./upload";

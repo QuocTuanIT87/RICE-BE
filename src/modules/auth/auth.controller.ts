@@ -7,7 +7,7 @@ import { Vip } from "../vips/vip.model";
 import { VipLevel } from "../vipLevels/vipLevel.model";
 import { env } from "../../config";
 import { ServiceError, Errors } from "../../middlewares";
-import { sendOTPEmail } from "../../services";
+import { sendOTPEmail, uploadToCloudinary } from "../../services";
 import { generateOTP, getOTPExpiry, isOTPValid } from "../../utils";
 import { JwtPayload } from "../../types";
 import { updateUserVipLevel } from "../../utils/vip";
@@ -70,6 +70,7 @@ const getMergedUser = async (user: any) => {
     name: user.name,
     email: user.email,
     phone: user.phone,
+    avatar: user.avatar || "",
     role: user.role,
     isVerified: user.isVerified,
     isBlocked: user.isBlocked,
@@ -413,6 +414,45 @@ export const logout = async (
     res.json({
       success: true,
       message: "Đăng xuất thành công!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/auth/avatar
+ * Cập nhật ảnh đại diện
+ */
+export const updateAvatar = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!req.file) {
+      throw new ServiceError("MISSING_FILE", "Vui lòng chọn ảnh đại diện cần cập nhật", 400);
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw Errors.USER_NOT_FOUND;
+    }
+
+    // Upload file lên Cloudinary (hoặc fallback base64 nếu chưa cấu hình)
+    const avatarUrl = await uploadToCloudinary(req.file.buffer, "rice-order/avatar");
+
+    // Cập nhật avatar trong DB
+    user.avatar = avatarUrl;
+    await user.save();
+
+    const mergedUser = await getMergedUser(user);
+
+    res.json({
+      success: true,
+      message: "Cập nhật ảnh đại diện thành công!",
+      data: mergedUser,
     });
   } catch (error) {
     next(error);

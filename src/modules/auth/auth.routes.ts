@@ -1,7 +1,7 @@
 // Auth Routes - Định tuyến cho module xác thực
 import { Router } from "express";
 import * as authController from "./auth.controller";
-import { auth } from "../../middlewares";
+import { auth, upload } from "../../middlewares";
 
 const router = Router();
 
@@ -15,6 +15,7 @@ router.post("/login", authController.login);
 router.get("/me", auth, authController.getMe);
 router.post("/logout", auth, authController.logout);
 router.patch("/profile", auth, authController.updateProfile);
+router.patch("/avatar", auth, upload.single("avatar"), authController.updateAvatar);
 router.patch("/change-password", auth, authController.changePassword);
 
 export default router;
