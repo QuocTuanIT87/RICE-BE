@@ -249,3 +249,141 @@ export const giftMembership = async (
   }
 };
 
+/**
+ * POST /api/user-memberships/admin-gift
+ * Admin tặng gói Hội Viên VIP cho một user hoặc toàn bộ user
+ */
+export const adminGiftMembership = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { receiverId, vipPackageId, giftAll } = req.body;
+
+    if (!vipPackageId) {
+      throw new ServiceError("MISSING_PACKAGE_ID", "Vui lòng chọn gói VIP cần tặng", 400);
+    }
+
+    const pkg = await VipPackage.findById(vipPackageId);
+    if (!pkg) {
+      throw new ServiceError("PACKAGE_NOT_FOUND", "Không tìm thấy gói VIP này", 404);
+    }
+
+    const now = new Date();
+    const expiresDate = new Date(now.getTime() + pkg.validDays * 24 * 60 * 60 * 1000);
+
+    if (giftAll) {
+      // Tặng cho toàn bộ user chưa có VIP
+      const users = await User.find({ role: "user" });
+      let giftedCount = 0;
+
+      for (const targetUser of users) {
+        // Kiểm tra xem user này đã có VIP đang hoạt động chưa
+        const activeMembership = await UserMembership.findOne({
+          userId: targetUser._id,
+          isActive: true,
+          expiresAt: { $gt: now },
+        });
+
+        // Nếu đã có VIP hoạt động thì bỏ qua, tránh đè gói cũ
+        if (activeMembership) {
+          continue;
+        }
+
+        // Tạo mới UserMembership cho người này
+        const membership = new UserMembership({
+          userId: targetUser._id,
+          vipPackageId: pkg._id,
+          activatedAt: now,
+          expiresAt: expiresDate,
+          isActive: true,
+        });
+        await membership.save();
+        giftedCount++;
+      }
+
+      if (giftedCount > 0) {
+        // Tạo thông báo chung (Broadcast)
+        const newNotif = new Notification({
+          userId: null,
+          title: "🎁 Tặng gói Hội Viên VIP toàn hệ thống",
+          content: `Ban quản trị đã tặng gói hội viên VIP "${pkg.name}" thời hạn ${pkg.validDays} ngày cho tất cả thành viên chưa kích hoạt VIP!`,
+          type: "gift",
+          readBy: [],
+        });
+        await newNotif.save();
+
+        // Phát realtime cho toàn bộ client
+        const notifObj = newNotif.toObject();
+        notifObj.isRead = false;
+        delete notifObj.readBy;
+        socketService.emitAll("notification_received", notifObj);
+      }
+
+      res.json({
+        success: true,
+        message: `Đã tặng thành công gói ${pkg.name} cho ${giftedCount} người dùng chưa có VIP!`,
+      });
+    } else {
+      // Tặng cho một người dùng cụ thể
+      if (!receiverId) {
+        throw new ServiceError("MISSING_RECEIVER_ID", "Vui lòng chọn người nhận gói VIP", 400);
+      }
+
+      const receiver = await User.findById(receiverId);
+      if (!receiver) {
+        throw new ServiceError("RECEIVER_NOT_FOUND", "Không tìm thấy tài khoản người nhận", 404);
+      }
+
+      // Kiểm tra xem người nhận đã có VIP chưa
+      const activeMembership = await UserMembership.findOne({
+        userId: receiverId,
+        isActive: true,
+        expiresAt: { $gt: now },
+      });
+
+      if (activeMembership) {
+        throw new ServiceError(
+          "RECEIVER_ALREADY_HAS_VIP",
+          `Đạo hữu ${receiver.name} hiện đã có gói VIP đang hoạt động, không cần tặng thêm.`,
+          400
+        );
+      }
+
+      // Tạo mới UserMembership
+      const membership = new UserMembership({
+        userId: receiverId,
+        vipPackageId: pkg._id,
+        activatedAt: now,
+        expiresAt: expiresDate,
+        isActive: true,
+      });
+      await membership.save();
+
+      // Tạo thông báo riêng cho người nhận
+      const newNotif = new Notification({
+        userId: receiverId,
+        title: "🎁 Được tặng gói Hội Viên VIP",
+        content: `Ban quản trị đã tặng riêng cho đạo hữu gói hội viên VIP "${pkg.name}" thời hạn ${pkg.validDays} ngày. Chúc đạo hữu tu vi tinh tiến!`,
+        type: "gift",
+        isRead: false,
+      });
+      await newNotif.save();
+
+      // Phát realtime cho người nhận
+      const notifObj = newNotif.toObject();
+      notifObj.isRead = false;
+      delete notifObj.readBy;
+      socketService.emitToUser(receiverId, "notification_received", notifObj);
+
+      res.json({
+        success: true,
+        message: `Đã tặng gói ${pkg.name} cho đạo hữu ${receiver.name} thành công!`,
+      });
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+

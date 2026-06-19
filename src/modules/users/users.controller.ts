@@ -508,11 +508,26 @@ export const searchUsers = async (
       .select("name email avatar role")
       .limit(10);
 
+    const usersWithMembership = await Promise.all(
+      users.map(async (u) => {
+        const uObj = u.toObject();
+        const membership = await UserMembership.findOne({
+          userId: u._id,
+          isActive: true,
+          expiresAt: { $gt: new Date() },
+        });
+        return {
+          ...uObj,
+          hasMembership: !!membership,
+        };
+      })
+    );
+
     res.json({
       success: true,
       data: {
-        docs: users,
-        total: users.length,
+        docs: usersWithMembership,
+        total: usersWithMembership.length,
         page: 1,
         limit: 10,
         pages: 1,
