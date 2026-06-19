@@ -19,10 +19,10 @@ export const createDepositRequest = async (
   try {
     const { amount, voucherCode } = req.body;
 
-    if (amount === undefined || typeof amount !== "number" || amount < 1000) {
+    if (amount === undefined || typeof amount !== "number" || amount < 10000) {
       throw new ServiceError(
         "INVALID_AMOUNT",
-        "Số tiền nạp không hợp lệ. Tối thiểu là 1,000 VND.",
+        "Số tiền nạp không hợp lệ. Tối thiểu là 10,000 linh thạch.",
         400,
       );
     }

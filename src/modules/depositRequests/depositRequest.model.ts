@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document } from "mongoose";
 import { IDepositRequest } from "../../types";
 
-export interface IDepositRequestDocument extends Omit<IDepositRequest, "_id">, Document {}
+export interface IDepositRequestDocument extends Omit<IDepositRequest, "_id">, Document { }
 
 const depositRequestSchema = new Schema<IDepositRequestDocument>(
   {
@@ -13,7 +13,7 @@ const depositRequestSchema = new Schema<IDepositRequestDocument>(
     amount: {
       type: Number,
       required: [true, "Số tiền nạp là bắt buộc"],
-      min: [1000, "Số tiền nạp tối thiểu là 1,000 VND"],
+      min: [10000, "Số tiền nạp tối thiểu là 10,000 linh thạch"],
     },
     voucherCode: {
       type: String,
