@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import { DepositRequest } from "./depositRequest.model";
 import { User } from "../auth/user.model";
+import { Wallet } from "../wallets/wallet.model";
 import { Voucher } from "../vouchers/voucher.model";
 import { ServiceError } from "../../middlewares";
 import { socketService } from "../../services";
+import { updateUserVipLevel } from "../../utils/vip";
 
 /**
  * POST /api/deposit-requests
@@ -145,7 +147,7 @@ export const getDepositRequests = async (
 
     const [docs, total] = await Promise.all([
       DepositRequest.find(filter)
-        .populate("userId", "name email phone balance")
+        .populate("userId", "name email phone")
         .populate("processedBy", "name email")
         .sort({ requestedAt: -1 })
         .skip(skip)
@@ -153,10 +155,22 @@ export const getDepositRequests = async (
       DepositRequest.countDocuments(filter),
     ]);
 
+    const docsWithBalance = await Promise.all(
+      docs.map(async (doc) => {
+        const docObj = doc.toObject();
+        if (docObj.userId && typeof docObj.userId === "object") {
+          const u = docObj.userId as any;
+          const w = await Wallet.findOne({ userId: u._id });
+          u.balance = w ? w.balance : 0;
+        }
+        return docObj;
+      })
+    );
+
     res.json({
       success: true,
       data: {
-        docs,
+        docs: docsWithBalance,
         total,
         page: pageNum,
         limit: limitNum,
@@ -203,8 +217,12 @@ export const approveDepositRequest = async (
     }
 
     const bonus = request.bonusAmount || 0;
-    user.balance = (user.balance || 0) + request.amount + bonus;
-    await user.save();
+    let wallet = await Wallet.findOne({ userId: user._id });
+    if (!wallet) {
+      wallet = await Wallet.create({ userId: user._id, balance: 0 });
+    }
+    wallet.balance += request.amount + bonus;
+    await wallet.save();
 
     // Nếu có voucher, cập nhật trạng thái voucher
     if (request.voucherCode) {
@@ -226,14 +244,15 @@ export const approveDepositRequest = async (
     request.processedBy = req.user!.userId as any;
     await request.save();
 
+    // Cập nhật cấp độ VIP sau khi nạp tiền thành công
+    await updateUserVipLevel(user._id.toString());
+
     // Phát tín hiệu cập nhật ví tiền real-time qua Socket
     socketService.emitToUser(user._id.toString(), "coins_updated", {
-      balance: user.balance,
-      gameCoins: user.gameCoins,
+      balance: wallet.balance,
     });
     socketService.emitToUser(user._id.toString(), "purchase_request_approved", {
-      balance: user.balance,
-      gameCoins: user.gameCoins,
+      balance: wallet.balance,
     });
 
     const bonusText = bonus > 0 ? ` (+${bonus.toLocaleString("vi-VN")} VND khuyến mãi)` : "";

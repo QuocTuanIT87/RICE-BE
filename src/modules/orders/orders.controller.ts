@@ -5,8 +5,12 @@ import { OrderItem } from "./orderItem.model";
 import { DailyMenu } from "../dailyMenus/dailyMenu.model";
 import { MenuItem } from "../menuItems/menuItem.model";
 import { User } from "../auth/user.model";
+import { Wallet } from "../wallets/wallet.model";
+import { Vip } from "../vips/vip.model";
+import { VipLevel } from "../vipLevels/vipLevel.model";
+import { evaluateVipLevel } from "../../utils/vip";
 import { Voucher } from "../vouchers/voucher.model";
-import SystemConfig from "../../models/SystemConfig";
+import SystemConfig from "../system/systemConfig.model";
 import { ServiceError } from "../../middlewares";
 import { getStartOfDay, getEndOfDay, isWithinTimeRange } from "../../utils";
 import { socketService } from "../../services";
@@ -184,6 +188,29 @@ export const createOrder = async (
       dailyMenuId: menu._id,
     });
 
+    // Xử lý giảm giá VIP động (Option B)
+    let vip = await Vip.findOne({ userId }).populate("vipLevelId");
+    if (!vip) {
+      let normalLevel = await VipLevel.findOne({ levelCode: "normal" });
+      if (!normalLevel) {
+        normalLevel = await VipLevel.create({
+          levelCode: "normal",
+          name: "Thành viên thường",
+          threshold: 0,
+          discountRate: 0,
+        });
+      }
+      vip = await Vip.create({
+        userId,
+        totalSpent: 0,
+        vipLevelId: normalLevel._id,
+      });
+      vip.vipLevelId = normalLevel as any;
+    }
+    const vipLevel = vip.vipLevelId as any;
+    const vipDiscountRate = vipLevel?.discountRate || 0; // ví dụ: 6%
+    const vipDiscountAmount = Math.round(subtotal * (vipDiscountRate / 100));
+
     // Xử lý áp dụng voucher giảm giá
     let discountAmount = 0;
     let appliedVoucherDoc = null;
@@ -244,31 +271,37 @@ export const createOrder = async (
       appliedVoucherDoc = voucher;
     }
 
-    const totalPrice = Math.max(0, subtotal - discountAmount);
+    const totalPrice = Math.max(0, subtotal - vipDiscountAmount - discountAmount);
 
     // Lấy thông tin đơn hàng cũ để tính độ lệch giá trị
     const oldPrice = existingOrder ? (existingOrder.totalPrice ?? 0) : 0;
     const diffPrice = totalPrice - oldPrice;
 
-    // Lấy thông tin user để xem số dư ví tiền
-    const userDoc = await User.findById(userId);
-    if (!userDoc) {
-      throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy user", 404);
+    // Lấy thông tin ví của user
+    let wallet = await Wallet.findOne({ userId });
+    if (!wallet) {
+      wallet = await Wallet.create({ userId, balance: 0 });
     }
 
     // Nếu phải đóng thêm tiền chênh lệch, kiểm tra số dư ví
-    if (diffPrice > 0 && userDoc.balance < diffPrice) {
+    if (diffPrice > 0 && wallet.balance < diffPrice) {
       throw new ServiceError(
         "INSUFFICIENT_BALANCE",
-        `Số dư ví không đủ. Cần thêm ${diffPrice.toLocaleString("vi-VN")} VND để nâng cấp đơn cơm. Bạn hiện có ${userDoc.balance.toLocaleString("vi-VN")} VND. Vui lòng nạp thêm tiền!`,
+        `Số dư ví không đủ. Cần thêm ${diffPrice.toLocaleString("vi-VN")} VND để nâng cấp đơn cơm. Bạn hiện có ${wallet.balance.toLocaleString("vi-VN")} VND. Vui lòng nạp thêm tiền!`,
         400,
       );
     }
 
-    // Thực hiện trừ/hoàn tiền trực tiếp vào ví
+    // Thực hiện trừ/hoàn tiền trực tiếp vào ví và cập nhật tích lũy VIP
     if (diffPrice !== 0) {
-      userDoc.balance -= diffPrice;
-      await userDoc.save();
+      wallet.balance -= diffPrice;
+      await wallet.save();
+
+      // Cập nhật tích lũy chi tiêu và tính lại VIP
+      vip.totalSpent = Math.max(0, vip.totalSpent + diffPrice);
+      const newVipLevel = await evaluateVipLevel(vip.totalSpent);
+      vip.vipLevelId = newVipLevel._id as any;
+      await vip.save();
     }
 
     // Xử lý thu hồi voucher cũ nếu người dùng đổi voucher hoặc xóa voucher
@@ -301,6 +334,8 @@ export const createOrder = async (
       existingOrder.totalPrice = totalPrice;
       existingOrder.voucherCode = voucherCode ? voucherCode.toUpperCase().trim() : "";
       existingOrder.discountAmount = discountAmount;
+      existingOrder.vipDiscountAmount = vipDiscountAmount;
+      existingOrder.vipLevelAtOrder = vipLevel?.name || "Thành viên thường";
       existingOrder.isConfirmed = true; // Đã thanh toán
       await existingOrder.save();
 
@@ -345,6 +380,8 @@ export const createOrder = async (
       totalPrice,
       voucherCode: voucherCode ? voucherCode.toUpperCase().trim() : "",
       discountAmount,
+      vipDiscountAmount,
+      vipLevelAtOrder: vipLevel?.name || "Thành viên thường",
       isConfirmed: true, // Thanh toán tức thì thành công
       orderedAt: new Date(),
     });
@@ -687,12 +724,15 @@ export const deleteOrder = async (
       );
     }
 
-    // Hoàn tiền đặt cơm vào ví của khách hàng
+    // Hoàn tiền đặt cơm vào ví của khách hàng và khấu trừ tích lũy VIP
     const refundAmount = order.totalPrice ?? 0;
     if (refundAmount > 0) {
-      await User.findByIdAndUpdate(order.userId, {
-        $inc: { balance: refundAmount }
-      });
+      let wallet = await Wallet.findOne({ userId: order.userId });
+      if (!wallet) {
+        wallet = await Wallet.create({ userId: order.userId, balance: 0 });
+      }
+      wallet.balance += refundAmount;
+      await wallet.save();
     }
 
     // Khôi phục mã giảm giá (nếu có dùng)

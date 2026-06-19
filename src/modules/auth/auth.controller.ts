@@ -2,11 +2,15 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { User, IUserDocument } from "./user.model";
+import { Wallet } from "../wallets/wallet.model";
+import { Vip } from "../vips/vip.model";
+import { VipLevel } from "../vipLevels/vipLevel.model";
 import { env } from "../../config";
 import { ServiceError, Errors } from "../../middlewares";
 import { sendOTPEmail } from "../../services";
 import { generateOTP, getOTPExpiry, isOTPValid } from "../../utils";
 import { JwtPayload } from "../../types";
+import { updateUserVipLevel } from "../../utils/vip";
 
 /**
  * Tạo JWT token cho user
@@ -18,6 +22,65 @@ const createToken = (user: IUserDocument): string => {
     role: user.role,
   };
   return jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'] });
+};
+
+/**
+ * Helper to construct merged user object with wallet and VIP information
+ */
+const getMergedUser = async (user: any) => {
+  let wallet = await Wallet.findOne({ userId: user._id });
+  if (!wallet) {
+    wallet = await Wallet.create({ userId: user._id, balance: 0 });
+  }
+
+  let vip = await Vip.findOne({ userId: user._id }).populate("vipLevelId");
+  
+  // Tự động kiểm tra reset cấp VIP đầu năm dương lịch (Self-healing reset)
+  if (vip) {
+    const currentYear = new Date().getFullYear();
+    const lastUpdateYear = vip.updatedAt ? new Date(vip.updatedAt).getFullYear() : currentYear;
+    if (lastUpdateYear < currentYear) {
+      vip = await updateUserVipLevel(user._id.toString());
+      vip = await Vip.populate(vip, "vipLevelId");
+    }
+  }
+
+  if (!vip) {
+    let normalLevel = await VipLevel.findOne({ levelCode: "normal" });
+    if (!normalLevel) {
+      normalLevel = await VipLevel.create({
+        levelCode: "normal",
+        name: "Thành viên thường",
+        threshold: 0,
+        discountRate: 0,
+      });
+    }
+    vip = await Vip.create({
+      userId: user._id,
+      totalSpent: 0,
+      vipLevelId: normalLevel._id,
+    });
+    vip.vipLevelId = normalLevel as any;
+  }
+
+  const vipLevel = vip.vipLevelId as any;
+
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    isVerified: user.isVerified,
+    isBlocked: user.isBlocked,
+    balance: wallet.balance,
+    totalSpent: vip.totalSpent,
+    vipLevelCode: vipLevel?.levelCode || "normal",
+    vipLevelName: vipLevel?.name || "Thành viên thường",
+    vipDiscountRate: vipLevel?.discountRate || 0,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
 };
 
 /**
@@ -121,19 +184,14 @@ export const verifyOTP = async (
     // Set cookie
     res.cookie("token", token, COOKIE_OPTIONS);
 
+    const mergedUser = await getMergedUser(user);
+
     res.json({
       success: true,
       message: "Xác thực tài khoản thành công!",
       data: {
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          gameCoins: user.gameCoins,
-          createdAt: user.createdAt,
-        },
+        user: mergedUser,
       },
     });
   } catch (error) {
@@ -226,19 +284,14 @@ export const login = async (
     // Set cookie
     res.cookie("token", token, COOKIE_OPTIONS);
 
+    const mergedUser = await getMergedUser(user);
+
     res.json({
       success: true,
       message: "Đăng nhập thành công! Chào mừng đến với Web Đặt Cơm! 🍚",
       data: {
         token,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          gameCoins: user.gameCoins,
-          createdAt: user.createdAt,
-        },
+        user: mergedUser,
       },
     });
   } catch (error) {
@@ -262,19 +315,11 @@ export const getMe = async (
       throw Errors.USER_NOT_FOUND;
     }
 
+    const mergedUser = await getMergedUser(user);
+
     res.json({
       success: true,
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        isVerified: user.isVerified,
-        gameCoins: user.gameCoins,
-        balance: user.balance,
-        createdAt: user.createdAt,
-      },
+      data: mergedUser,
     });
   } catch (error) {
     next(error);
@@ -304,19 +349,12 @@ export const updateProfile = async (
 
     await user.save();
 
+    const mergedUser = await getMergedUser(user);
+
     res.json({
       success: true,
       message: "Cập nhật thông tin cá nhân thành công!",
-      data: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        isVerified: user.isVerified,
-        gameCoins: user.gameCoins,
-        createdAt: user.createdAt,
-      },
+      data: mergedUser,
     });
   } catch (error) {
     next(error);

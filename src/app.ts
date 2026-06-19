@@ -14,9 +14,10 @@ import { depositRequestsRoutes } from "./modules/depositRequests";
 import { dailyMenusRoutes } from "./modules/dailyMenus";
 import { ordersRoutes } from "./modules/orders";
 import { statisticsRoutes } from "./modules/statistics";
-import { gameCoinsRoutes } from "./modules/gameCoins";
 import voucherRoutes from "./modules/vouchers/vouchers.routes";
 import { systemRoutes } from "./modules/system";
+import vipLevelsRoutes from "./modules/vipLevels/vipLevels.routes";
+import { seedDefaultVipLevels } from "./utils/vip";
 import { maintenanceMiddleware } from "./middlewares/maintenance";
 import { softAuth, licenseMiddleware } from "./middlewares";
 
@@ -77,7 +78,7 @@ app.use("/api/deposit-requests", depositRequestsRoutes);
 app.use("/api/daily-menus", dailyMenusRoutes);
 app.use("/api/orders", ordersRoutes);
 app.use("/api/statistics", statisticsRoutes);
-app.use("/api/game-coins", gameCoinsRoutes);
+app.use("/api/vip-levels", vipLevelsRoutes);
 app.use("/api/vouchers", voucherRoutes);
 
 // 404 handler
@@ -99,6 +100,9 @@ const startServer = async () => {
   try {
     // Kết nối database
     await connectDB();
+
+    // Seed default VIP levels
+    await seedDefaultVipLevels();
 
     // Start server bằng httpServer để hỗ trợ Socket.io
     httpServer.listen(env.PORT, "0.0.0.0", () => {

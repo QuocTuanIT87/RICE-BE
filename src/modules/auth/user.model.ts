@@ -57,16 +57,6 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       select: false,
     },
-    gameCoins: {
-      type: Number,
-      default: 0,
-      min: [0, "Xu không được âm"],
-    },
-    balance: {
-      type: Number,
-      default: 0,
-      min: [0, "Số dư tài khoản không được âm"],
-    },
   },
   {
     timestamps: true,

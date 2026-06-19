@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import SystemConfig from "../../models/SystemConfig";
+import SystemConfig from "./systemConfig.model";
 import { socketService } from "../../services/socketService";
 
 /**

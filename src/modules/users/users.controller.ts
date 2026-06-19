@@ -1,6 +1,9 @@
 // Users Controller - Quản lý người dùng (Admin)
 import { Request, Response, NextFunction } from "express";
 import { User } from "../auth/user.model";
+import { Wallet } from "../wallets/wallet.model";
+import { Vip } from "../vips/vip.model";
+import { VipLevel } from "../vipLevels/vipLevel.model";
 import { Order } from "../orders/order.model";
 import { DepositRequest } from "../depositRequests/depositRequest.model";
 import { ServiceError } from "../../middlewares";
@@ -43,10 +46,27 @@ export const getUsers = async (
       User.countDocuments(filter),
     ]);
 
+    const usersWithWallet = await Promise.all(
+      users.map(async (u) => {
+        const uObj = u.toObject();
+        const w = await Wallet.findOne({ userId: u._id });
+        const v = await Vip.findOne({ userId: u._id }).populate("vipLevelId");
+        const vipLevel = v?.vipLevelId as any;
+        return {
+          ...uObj,
+          balance: w ? w.balance : 0,
+          totalSpent: v ? v.totalSpent : 0,
+          vipLevelCode: vipLevel?.levelCode || "normal",
+          vipLevelName: vipLevel?.name || "Thành viên thường",
+          vipDiscountRate: vipLevel?.discountRate || 0,
+        };
+      })
+    );
+
     res.json({
       success: true,
       data: {
-        docs: users,
+        docs: usersWithWallet,
         total,
         page,
         limit,
@@ -79,6 +99,32 @@ export const getUserById = async (
       );
     }
 
+    // Lấy ví & VIP đi kèm
+    let wallet = await Wallet.findOne({ userId: user._id });
+    if (!wallet) {
+      wallet = await Wallet.create({ userId: user._id, balance: 0 });
+    }
+    let vip = await Vip.findOne({ userId: user._id }).populate("vipLevelId");
+    if (!vip) {
+      const normalLevel = await VipLevel.findOne({ levelCode: "normal" });
+      vip = await Vip.create({
+        userId: user._id,
+        totalSpent: 0,
+        vipLevelId: normalLevel?._id,
+      });
+      if (normalLevel) vip.vipLevelId = normalLevel as any;
+    }
+    const vipLevel = vip.vipLevelId as any;
+
+    const userObj = {
+      ...user.toObject(),
+      balance: wallet.balance,
+      totalSpent: vip.totalSpent,
+      vipLevelCode: vipLevel?.levelCode || "normal",
+      vipLevelName: vipLevel?.name || "Thành viên thường",
+      vipDiscountRate: vipLevel?.discountRate || 0,
+    };
+
     // Lấy lịch sử yêu cầu nạp tiền
     const packages = await DepositRequest.find({ userId: user._id })
       .sort({ requestedAt: -1 });
@@ -96,7 +142,7 @@ export const getUserById = async (
     res.json({
       success: true,
       data: {
-        user,
+        user: userObj,
         packages,
         orders,
       },
@@ -233,19 +279,26 @@ export const getLeaderboard = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const topUsers = await User.find({ role: { $ne: "admin" } })
-      .select("name avatar balance gameCoins")
-      .sort({ balance: -1 })
-      .limit(10);
+    const topWallets = await Wallet.find()
+      .populate({
+        path: "userId",
+        match: { role: { $ne: "admin" } },
+        select: "name avatar"
+      })
+      .sort({ balance: -1 });
+
+    const filteredWallets = topWallets.filter(w => w.userId !== null).slice(0, 10);
 
     // Format matching the expected properties in frontend
-    const formattedUsers = topUsers.map(u => ({
-      _id: u._id,
-      name: u.name,
-      avatar: (u as any).avatar,
-      gameCoins: u.gameCoins,
-      totalTurns: u.balance, // reuse totalTurns property as balance to avoid breaking frontend leaderboard
-    }));
+    const formattedUsers = filteredWallets.map(w => {
+      const u = w.userId as any;
+      return {
+        _id: u?._id,
+        name: u?.name,
+        avatar: u?.avatar,
+        totalTurns: w.balance, // reuse totalTurns property as balance to avoid breaking frontend leaderboard
+      };
+    });
 
     res.json({
       success: true,
@@ -257,23 +310,43 @@ export const getLeaderboard = async (
 };
 
 /**
- * GET /api/users/leaderboard/coins
- * Lấy bảng xếp hạng Top Tỷ Phú Xu (Public)
+ * GET /api/users/leaderboard/vip
+ * Lấy bảng xếp hạng Top Đại Phú Hào (VIP) (Public)
  */
-export const getTopCoins = async (
+export const getTopVip = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const topUsers = await User.find({ role: { $ne: "admin" } })
-      .select("name avatar gameCoins")
-      .sort({ gameCoins: -1 })
-      .limit(10);
+    const topVips = await Vip.find()
+      .populate({
+        path: "userId",
+        match: { role: { $ne: "admin" } },
+        select: "name avatar"
+      })
+      .populate("vipLevelId")
+      .sort({ totalSpent: -1 });
+
+    const filteredVips = topVips.filter(v => v.userId !== null).slice(0, 10);
+
+    const formattedUsers = filteredVips.map(v => {
+      const u = v.userId as any;
+      const vl = v.vipLevelId as any;
+      return {
+        _id: u?._id,
+        name: u?.name,
+        avatar: u?.avatar,
+        totalSpent: v.totalSpent,
+        vipLevelCode: vl?.levelCode || "normal",
+        vipLevelName: vl?.name || "Thành viên thường",
+        vipDiscountRate: vl?.discountRate || 0,
+      };
+    });
 
     res.json({
       success: true,
-      data: topUsers,
+      data: formattedUsers,
     });
   } catch (error) {
     next(error);
@@ -291,8 +364,6 @@ export const getTopOrders = async (
 ): Promise<void> => {
   try {
     const topUsers = await Order.aggregate([
-      // Chỉ tính các đơn đã xác nhận (tùy nhu cầu, ở đây tính hết cũng được)
-      // { $match: { isConfirmed: true } },
       {
         $group: {
           _id: "$userId",
@@ -317,12 +388,35 @@ export const getTopOrders = async (
         $unwind: "$userInfo",
       },
       {
+        $lookup: {
+          from: "vips",
+          localField: "_id",
+          foreignField: "userId",
+          as: "vipInfo",
+        },
+      },
+      {
+        $unwind: { path: "$vipInfo", preserveNullAndEmptyArrays: true },
+      },
+      {
+        $lookup: {
+          from: "viplevels",
+          localField: "vipInfo.vipLevelId",
+          foreignField: "_id",
+          as: "vipLevelInfo",
+        },
+      },
+      {
+        $unwind: { path: "$vipLevelInfo", preserveNullAndEmptyArrays: true },
+      },
+      {
         $project: {
           _id: 1,
           orderCount: 1,
           name: "$userInfo.name",
-          gameCoins: "$userInfo.gameCoins",
           avatar: "$userInfo.avatar",
+          vipLevelName: "$vipLevelInfo.name",
+          vipLevelCode: "$vipLevelInfo.levelCode",
         },
       },
     ]);
@@ -356,12 +450,17 @@ export const updateUserBalance = async (
       throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy người dùng", 404);
     }
 
-    user.balance = balance;
-    await user.save();
+    let wallet = await Wallet.findOne({ userId: user._id });
+    if (!wallet) {
+      wallet = await Wallet.create({ userId: user._id, balance: 0 });
+    }
+
+    wallet.balance = balance;
+    await wallet.save();
 
     // Phát tín hiệu cập nhật ví tiền real-time
     socketService.emitToUser(user._id.toString(), "coins_updated", {
-      balance: user.balance,
+      balance: wallet.balance,
     });
 
     res.json({

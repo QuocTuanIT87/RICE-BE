@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import SystemConfig from "../models/SystemConfig";
+import SystemConfig from "../modules/system/systemConfig.model";
 
 /**
  * Middleware kiểm tra trạng thái bảo trì hệ thống

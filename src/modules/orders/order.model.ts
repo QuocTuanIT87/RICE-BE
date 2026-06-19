@@ -37,6 +37,15 @@ const orderSchema = new Schema<IOrderDocument>(
       default: 0,
       min: [0, "Số tiền giảm không được âm"],
     },
+    vipDiscountAmount: {
+      type: Number,
+      default: 0,
+      min: [0, "Số tiền giảm VIP không được âm"],
+    },
+    vipLevelAtOrder: {
+      type: String,
+      default: "normal",
+    },
     isConfirmed: {
       type: Boolean,
       default: false,

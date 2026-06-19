@@ -19,8 +19,38 @@ export interface IUser {
   isBlocked: boolean; // Bị khóa tài khoản không
   otpCode?: string; // Mã OTP tạm thời
   otpExpiry?: Date; // Thời gian hết hạn OTP
-  gameCoins: number; // Xu chơi game giải trí
-  balance: number; // Số dư ví tiền VND (mới)
+  balance?: number; // Số dư ví tiền VND (tính từ Wallet model, gộp vào API)
+  totalSpent?: number; // Tổng chi tiêu tích lũy (tính từ Vip model, gộp vào API)
+  vipLevelCode?: string; // Mã hạng VIP (normal, silver, gold, diamond)
+  vipLevelName?: string; // Tên hạng VIP
+  vipDiscountRate?: number; // Phần trăm giảm giá VIP
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Interface cho Wallet document
+export interface IWallet {
+  userId: Types.ObjectId;
+  balance: number;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Interface cho VipLevel document
+export interface IVipLevel {
+  levelCode: string; // normal, silver, gold, diamond, etc.
+  name: string;
+  threshold: number;
+  discountRate: number; // 0, 3, 6, 10
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Interface cho Vip document
+export interface IVip {
+  userId: Types.ObjectId;
+  totalSpent: number;
+  vipLevelId: Types.ObjectId | IVipLevel;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -96,6 +126,8 @@ export interface IOrder {
   totalPrice?: number; // Tổng tiền của đơn đặt cơm (mới)
   voucherCode?: string; // Mã voucher áp dụng (nếu có)
   discountAmount?: number; // Số tiền được giảm từ voucher
+  vipDiscountAmount?: number; // Số tiền được giảm từ đặc quyền VIP
+  vipLevelAtOrder?: string; // Tên cấp độ VIP lúc đặt đơn
   orderedAt: Date;
   createdAt?: Date;
   updatedAt?: Date;
