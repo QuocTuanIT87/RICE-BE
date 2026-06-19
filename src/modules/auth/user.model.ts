@@ -75,6 +75,11 @@ const userSchema = new Schema<IUserDocument>(
       type: String,
       default: "",
     },
+    vipMascot: {
+      type: String,
+      enum: ["ronaldo", "messi", "neymar"],
+      default: "ronaldo",
+    },
   },
   {
     timestamps: true,

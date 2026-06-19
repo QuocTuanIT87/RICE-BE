@@ -54,6 +54,7 @@ const getMergedUser = async (user: any) => {
     vipTheme: user.vipTheme || "default",
     vipAvatarFrame: user.vipAvatarFrame || "none",
     vipCoverImage: user.vipCoverImage || "",
+    vipMascot: user.vipMascot || "ronaldo",
     hasMembership: !!membership,
     membershipName: (membership?.vipPackageId as any)?.name || "",
     membershipExpiresAt: membership?.expiresAt || null,
@@ -327,8 +328,8 @@ export const updateProfile = async (
     if (phone !== undefined) user.phone = phone;
 
     // Cập nhật tùy chọn giao diện VIP (Chỉ cho phép nếu đang có gói VIP)
-    const { vipTheme, vipAvatarFrame, vipCoverImage } = req.body;
-    if (vipTheme || vipAvatarFrame || vipCoverImage !== undefined) {
+    const { vipTheme, vipAvatarFrame, vipCoverImage, vipMascot } = req.body;
+    if (vipTheme || vipAvatarFrame || vipCoverImage !== undefined || vipMascot !== undefined) {
       const membership = await UserMembership.findOne({
         userId,
         isActive: true,
@@ -342,6 +343,7 @@ export const updateProfile = async (
       if (vipTheme) user.vipTheme = vipTheme;
       if (vipAvatarFrame) user.vipAvatarFrame = vipAvatarFrame;
       if (vipCoverImage !== undefined) user.vipCoverImage = vipCoverImage;
+      if (vipMascot !== undefined) user.vipMascot = vipMascot;
     }
 
     await user.save();
