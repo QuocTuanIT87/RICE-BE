@@ -9,6 +9,7 @@ const router = Router();
 router.get("/leaderboard", auth, usersController.getLeaderboard);
 router.get("/leaderboard/vip", auth, usersController.getTopVip);
 router.get("/leaderboard/orders", auth, usersController.getTopOrders);
+router.get("/search", auth, usersController.searchUsers);
 
 // Tất cả routes bên dưới đều cần admin
 router.use(auth, adminOnly);

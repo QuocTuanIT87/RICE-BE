@@ -476,3 +476,49 @@ export const updateUserBalance = async (
     next(error);
   }
 };
+
+/**
+ * GET /api/users/search
+ * Tìm kiếm đồng nghiệp (Chỉ cần đăng nhập)
+ */
+export const searchUsers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { search } = req.query;
+    if (!search || typeof search !== "string") {
+      res.json({
+        success: true,
+        data: { docs: [], total: 0, page: 1, limit: 10, pages: 0 },
+      });
+      return;
+    }
+
+    const filter: any = {
+      isBlocked: { $ne: true },
+      $or: [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ],
+    };
+
+    const users = await User.find(filter)
+      .select("name email avatar role")
+      .limit(10);
+
+    res.json({
+      success: true,
+      data: {
+        docs: users,
+        total: users.length,
+        page: 1,
+        limit: 10,
+        pages: 1,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

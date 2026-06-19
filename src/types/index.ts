@@ -213,3 +213,15 @@ export interface IComment {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+export interface INotification {
+  _id?: string;
+  userId: Types.ObjectId | any | null; // null means broadcast to all
+  title: string;
+  content: string;
+  type: "system" | "gift" | "alert";
+  isRead?: boolean; // private only
+  readBy?: string[]; // user IDs list for broadcast notifications
+  createdAt?: Date;
+  updatedAt?: Date;
+}
