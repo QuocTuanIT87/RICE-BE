@@ -21,10 +21,13 @@ export interface IUser {
   otpCode?: string; // Mã OTP tạm thời
   otpExpiry?: Date; // Thời gian hết hạn OTP
   balance?: number; // Số dư ví tiền VND (tính từ Wallet model, gộp vào API)
-  totalSpent?: number; // Tổng chi tiêu tích lũy (tính từ Vip model, gộp vào API)
-  vipLevelCode?: string; // Mã hạng VIP (normal, silver, gold, diamond)
-  vipLevelName?: string; // Tên hạng VIP
-  vipDiscountRate?: number; // Phần trăm giảm giá VIP
+  vipDiscountRate?: number; // Mức giảm giá hội viên/VIP (VND trên mỗi suất ăn hoặc % trước đây)
+  vipTheme?: string; // Chủ đề giao diện VIP
+  vipAvatarFrame?: string; // Khung viền avatar VIP
+  vipCoverImage?: string; // Ảnh nền trang cá nhân
+  hasMembership?: boolean; // Có đang đăng ký VIP không
+  membershipName?: string; // Tên gói VIP đang dùng
+  membershipExpiresAt?: Date; // Ngày hết hạn gói VIP
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -37,21 +40,27 @@ export interface IWallet {
   updatedAt?: Date;
 }
 
-// Interface cho VipLevel document
-export interface IVipLevel {
-  levelCode: string; // normal, silver, gold, diamond, etc.
+// Interface cho VipPackage document
+export interface IVipPackage {
+  _id?: string;
   name: string;
-  threshold: number;
-  discountRate: number; // 0, 3, 6, 10
+  price: number;
+  discountAmount: number; // Số tiền giảm cứng mỗi phần cơm (vd: 2000 VND)
+  validDays: number;
+  isActive: boolean;
+  features: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-// Interface cho Vip document
-export interface IVip {
+// Interface cho UserMembership document
+export interface IUserMembership {
+  _id?: string;
   userId: Types.ObjectId;
-  totalSpent: number;
-  vipLevelId: Types.ObjectId | IVipLevel;
+  vipPackageId: Types.ObjectId | IVipPackage;
+  activatedAt: Date;
+  expiresAt: Date;
+  isActive: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -86,6 +95,8 @@ export interface IDepositRequest {
   processedBy?: Types.ObjectId; // Admin xử lý
   voucherCode?: string; // Mã voucher áp dụng (nếu có)
   bonusAmount?: number; // Số tiền thưởng khuyến mãi từ voucher
+  requestType?: "normal" | "buy_membership"; // Loại yêu cầu nạp
+  vipPackageId?: Types.ObjectId; // ID gói VIP mua nếu là buy_membership
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -167,4 +178,38 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
     total: number;
     totalPages: number;
   };
+}
+
+// =============================================
+// COMMUNITY FORUM TYPES
+// =============================================
+
+export interface IReaction {
+  userId: any;
+  type: "like" | "love" | "haha" | "wow" | "sad" | "angry";
+}
+
+export interface IPost {
+  _id?: string;
+  title: string;
+  content: string;
+  category: string; // Tám chuyện, Review, Đời sống, Kiến thức
+  userId: Types.ObjectId | any;
+  likes: string[]; // Danh sách User IDs đã thích
+  reactions?: IReaction[];
+  commentsCount?: number;
+  imageUrl?: string | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IComment {
+  _id?: string;
+  postId: Types.ObjectId | string;
+  userId: Types.ObjectId | any;
+  content: string;
+  parentId?: Types.ObjectId | string | null;
+  reactions?: IReaction[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }

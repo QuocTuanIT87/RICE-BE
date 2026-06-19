@@ -61,6 +61,20 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       select: false,
     },
+    vipTheme: {
+      type: String,
+      enum: ["default", "gold", "dark", "sakura"],
+      default: "default",
+    },
+    vipAvatarFrame: {
+      type: String,
+      enum: ["none", "gold-crown", "neon-ring", "diamond"],
+      default: "none",
+    },
+    vipCoverImage: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

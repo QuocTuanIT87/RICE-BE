@@ -2,8 +2,7 @@
 import { Request, Response, NextFunction } from "express";
 import { User } from "../auth/user.model";
 import { Wallet } from "../wallets/wallet.model";
-import { Vip } from "../vips/vip.model";
-import { VipLevel } from "../vipLevels/vipLevel.model";
+import { UserMembership } from "../userMemberships/userMembership.model";
 import { Order } from "../orders/order.model";
 import { DepositRequest } from "../depositRequests/depositRequest.model";
 import { ServiceError } from "../../middlewares";
@@ -50,15 +49,19 @@ export const getUsers = async (
       users.map(async (u) => {
         const uObj = u.toObject();
         const w = await Wallet.findOne({ userId: u._id });
-        const v = await Vip.findOne({ userId: u._id }).populate("vipLevelId");
-        const vipLevel = v?.vipLevelId as any;
+        const membership = await UserMembership.findOne({
+          userId: u._id,
+          isActive: true,
+          expiresAt: { $gt: new Date() },
+        }).populate("vipPackageId");
+
         return {
           ...uObj,
           balance: w ? w.balance : 0,
-          totalSpent: v ? v.totalSpent : 0,
-          vipLevelCode: vipLevel?.levelCode || "normal",
-          vipLevelName: vipLevel?.name || "Thành viên thường",
-          vipDiscountRate: vipLevel?.discountRate || 0,
+          hasMembership: !!membership,
+          membershipName: (membership?.vipPackageId as any)?.name || "",
+          membershipExpiresAt: membership?.expiresAt || null,
+          vipDiscountRate: (membership?.vipPackageId as any)?.discountAmount || 0,
         };
       })
     );
@@ -104,25 +107,19 @@ export const getUserById = async (
     if (!wallet) {
       wallet = await Wallet.create({ userId: user._id, balance: 0 });
     }
-    let vip = await Vip.findOne({ userId: user._id }).populate("vipLevelId");
-    if (!vip) {
-      const normalLevel = await VipLevel.findOne({ levelCode: "normal" });
-      vip = await Vip.create({
-        userId: user._id,
-        totalSpent: 0,
-        vipLevelId: normalLevel?._id,
-      });
-      if (normalLevel) vip.vipLevelId = normalLevel as any;
-    }
-    const vipLevel = vip.vipLevelId as any;
+    const membership = await UserMembership.findOne({
+      userId: user._id,
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+    }).populate("vipPackageId");
 
     const userObj = {
       ...user.toObject(),
       balance: wallet.balance,
-      totalSpent: vip.totalSpent,
-      vipLevelCode: vipLevel?.levelCode || "normal",
-      vipLevelName: vipLevel?.name || "Thành viên thường",
-      vipDiscountRate: vipLevel?.discountRate || 0,
+      hasMembership: !!membership,
+      membershipName: (membership?.vipPackageId as any)?.name || "",
+      membershipExpiresAt: membership?.expiresAt || null,
+      vipDiscountRate: (membership?.vipPackageId as any)?.discountAmount || 0,
     };
 
     // Lấy lịch sử yêu cầu nạp tiền
@@ -319,30 +316,27 @@ export const getTopVip = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const topVips = await Vip.find()
-      .populate({
-        path: "userId",
-        match: { role: { $ne: "admin" } },
-        select: "name avatar"
-      })
-      .populate("vipLevelId")
-      .sort({ totalSpent: -1 });
+    const activeMemberships = await UserMembership.find({
+      isActive: true,
+      expiresAt: { $gt: new Date() }
+    })
+      .populate("userId", "name avatar")
+      .populate("vipPackageId");
 
-    const filteredVips = topVips.filter(v => v.userId !== null).slice(0, 10);
-
-    const formattedUsers = filteredVips.map(v => {
-      const u = v.userId as any;
-      const vl = v.vipLevelId as any;
-      return {
-        _id: u?._id,
-        name: u?.name,
-        avatar: u?.avatar,
-        totalSpent: v.totalSpent,
-        vipLevelCode: vl?.levelCode || "normal",
-        vipLevelName: vl?.name || "Thành viên thường",
-        vipDiscountRate: vl?.discountRate || 0,
-      };
-    });
+    const formattedUsers = activeMemberships
+      .filter(m => m.userId !== null)
+      .map(m => {
+        const u = m.userId as any;
+        const pkg = m.vipPackageId as any;
+        return {
+          _id: u?._id,
+          name: u?.name,
+          avatar: u?.avatar,
+          totalSpent: pkg?.price || 0,
+          vipLevelName: pkg?.name || "Hội viên",
+          vipDiscountRate: pkg?.discountAmount || 0,
+        };
+      });
 
     res.json({
       success: true,
@@ -389,25 +383,35 @@ export const getTopOrders = async (
       },
       {
         $lookup: {
-          from: "vips",
-          localField: "_id",
-          foreignField: "userId",
-          as: "vipInfo",
+          from: "usermemberships",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$userId", "$$userId"] },
+                    { $eq: ["$isActive", true] },
+                    { $gt: ["$expiresAt", new Date()] }
+                  ]
+                }
+              }
+            },
+            {
+              $lookup: {
+                from: "vippackages",
+                localField: "vipPackageId",
+                foreignField: "_id",
+                as: "pkg"
+              }
+            },
+            { $unwind: "$pkg" }
+          ],
+          as: "activeMembership",
         },
       },
       {
-        $unwind: { path: "$vipInfo", preserveNullAndEmptyArrays: true },
-      },
-      {
-        $lookup: {
-          from: "viplevels",
-          localField: "vipInfo.vipLevelId",
-          foreignField: "_id",
-          as: "vipLevelInfo",
-        },
-      },
-      {
-        $unwind: { path: "$vipLevelInfo", preserveNullAndEmptyArrays: true },
+        $unwind: { path: "$activeMembership", preserveNullAndEmptyArrays: true },
       },
       {
         $project: {
@@ -415,8 +419,8 @@ export const getTopOrders = async (
           orderCount: 1,
           name: "$userInfo.name",
           avatar: "$userInfo.avatar",
-          vipLevelName: "$vipLevelInfo.name",
-          vipLevelCode: "$vipLevelInfo.levelCode",
+          vipLevelName: "$activeMembership.pkg.name",
+          vipLevelCode: { $cond: ["$activeMembership", "vip", "normal"] },
         },
       },
     ]);

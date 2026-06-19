@@ -40,6 +40,16 @@ const depositRequestSchema = new Schema<IDepositRequestDocument>(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    requestType: {
+      type: String,
+      enum: ["normal", "buy_membership"],
+      default: "normal",
+    },
+    vipPackageId: {
+      type: Schema.Types.ObjectId,
+      ref: "VipPackage",
+      default: null,
+    },
   },
   {
     timestamps: true,

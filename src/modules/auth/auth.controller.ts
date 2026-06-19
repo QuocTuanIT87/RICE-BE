@@ -3,14 +3,12 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { User, IUserDocument } from "./user.model";
 import { Wallet } from "../wallets/wallet.model";
-import { Vip } from "../vips/vip.model";
-import { VipLevel } from "../vipLevels/vipLevel.model";
+import { UserMembership } from "../userMemberships/userMembership.model";
 import { env } from "../../config";
 import { ServiceError, Errors } from "../../middlewares";
 import { sendOTPEmail, uploadToCloudinary } from "../../services";
 import { generateOTP, getOTPExpiry, isOTPValid } from "../../utils";
 import { JwtPayload } from "../../types";
-import { updateUserVipLevel } from "../../utils/vip";
 
 /**
  * Tạo JWT token cho user
@@ -33,37 +31,14 @@ const getMergedUser = async (user: any) => {
     wallet = await Wallet.create({ userId: user._id, balance: 0 });
   }
 
-  let vip = await Vip.findOne({ userId: user._id }).populate("vipLevelId");
-  
-  // Tự động kiểm tra reset cấp VIP đầu năm dương lịch (Self-healing reset)
-  if (vip) {
-    const currentYear = new Date().getFullYear();
-    const lastUpdateYear = vip.updatedAt ? new Date(vip.updatedAt).getFullYear() : currentYear;
-    if (lastUpdateYear < currentYear) {
-      vip = await updateUserVipLevel(user._id.toString());
-      vip = await Vip.populate(vip, "vipLevelId");
-    }
-  }
+  // Tìm gói hội viên đang hiệu lực của user
+  const membership = await UserMembership.findOne({
+    userId: user._id,
+    isActive: true,
+    expiresAt: { $gt: new Date() },
+  }).populate("vipPackageId");
 
-  if (!vip) {
-    let normalLevel = await VipLevel.findOne({ levelCode: "normal" });
-    if (!normalLevel) {
-      normalLevel = await VipLevel.create({
-        levelCode: "normal",
-        name: "Thành viên thường",
-        threshold: 0,
-        discountRate: 0,
-      });
-    }
-    vip = await Vip.create({
-      userId: user._id,
-      totalSpent: 0,
-      vipLevelId: normalLevel._id,
-    });
-    vip.vipLevelId = normalLevel as any;
-  }
-
-  const vipLevel = vip.vipLevelId as any;
+  const vipDiscountRate = (membership?.vipPackageId as any)?.discountAmount || 0;
 
   return {
     id: user._id,
@@ -75,10 +50,13 @@ const getMergedUser = async (user: any) => {
     isVerified: user.isVerified,
     isBlocked: user.isBlocked,
     balance: wallet.balance,
-    totalSpent: vip.totalSpent,
-    vipLevelCode: vipLevel?.levelCode || "normal",
-    vipLevelName: vipLevel?.name || "Thành viên thường",
-    vipDiscountRate: vipLevel?.discountRate || 0,
+    vipDiscountRate, // Trả về discountAmount của gói VIP để giữ tương thích ngược
+    vipTheme: user.vipTheme || "default",
+    vipAvatarFrame: user.vipAvatarFrame || "none",
+    vipCoverImage: user.vipCoverImage || "",
+    hasMembership: !!membership,
+    membershipName: (membership?.vipPackageId as any)?.name || "",
+    membershipExpiresAt: membership?.expiresAt || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -347,6 +325,24 @@ export const updateProfile = async (
 
     if (name) user.name = name;
     if (phone !== undefined) user.phone = phone;
+
+    // Cập nhật tùy chọn giao diện VIP (Chỉ cho phép nếu đang có gói VIP)
+    const { vipTheme, vipAvatarFrame, vipCoverImage } = req.body;
+    if (vipTheme || vipAvatarFrame || vipCoverImage !== undefined) {
+      const membership = await UserMembership.findOne({
+        userId,
+        isActive: true,
+        expiresAt: { $gt: new Date() },
+      });
+
+      if (!membership) {
+        throw new ServiceError("MEMBERSHIP_REQUIRED", "Đạo hữu cần sở hữu Gói VIP để kích hoạt tính năng này", 403);
+      }
+
+      if (vipTheme) user.vipTheme = vipTheme;
+      if (vipAvatarFrame) user.vipAvatarFrame = vipAvatarFrame;
+      if (vipCoverImage !== undefined) user.vipCoverImage = vipCoverImage;
+    }
 
     await user.save();
 

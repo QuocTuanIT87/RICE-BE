@@ -5,7 +5,8 @@ import { Wallet } from "../wallets/wallet.model";
 import { Voucher } from "../vouchers/voucher.model";
 import { ServiceError } from "../../middlewares";
 import { socketService } from "../../services";
-import { updateUserVipLevel } from "../../utils/vip";
+import { VipPackage } from "../vipPackages/vipPackage.model";
+import { UserMembership } from "../userMemberships/userMembership.model";
 
 /**
  * POST /api/deposit-requests
@@ -17,17 +18,30 @@ export const createDepositRequest = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { amount, voucherCode } = req.body;
+    const { amount, voucherCode, requestType = "normal", vipPackageId } = req.body;
 
-    if (amount === undefined || typeof amount !== "number" || amount < 10000) {
-      throw new ServiceError(
-        "INVALID_AMOUNT",
-        "Số tiền nạp không hợp lệ. Tối thiểu là 10,000 linh thạch.",
-        400,
-      );
+    let finalAmount = amount;
+    let bonusAmount = 0;
+
+    if (requestType === "buy_membership") {
+      if (!vipPackageId) {
+        throw new ServiceError("MISSING_PACKAGE_ID", "Vui lòng chọn gói VIP cần mua", 400);
+      }
+      const vipPackage = await VipPackage.findById(vipPackageId);
+      if (!vipPackage || !vipPackage.isActive) {
+        throw new ServiceError("PACKAGE_NOT_FOUND", "Không tìm thấy gói VIP này hoặc gói đã ẩn", 404);
+      }
+      finalAmount = vipPackage.price;
+    } else {
+      if (finalAmount === undefined || typeof finalAmount !== "number" || finalAmount < 10000) {
+        throw new ServiceError(
+          "INVALID_AMOUNT",
+          "Số tiền nạp không hợp lệ. Tối thiểu là 10,000 VND.",
+          400,
+        );
+      }
     }
 
-    let bonusAmount = 0;
     if (voucherCode) {
       const voucher = await Voucher.findOne({
         code: voucherCode.toUpperCase().trim(),
@@ -84,9 +98,11 @@ export const createDepositRequest = async (
 
     const request = new DepositRequest({
       userId: req.user!.userId,
-      amount,
-      voucherCode: voucherCode ? voucherCode.toUpperCase().trim() : "",
-      bonusAmount,
+      amount: finalAmount,
+      voucherCode: requestType === "buy_membership" ? "" : (voucherCode ? voucherCode.toUpperCase().trim() : ""),
+      bonusAmount: requestType === "buy_membership" ? 0 : bonusAmount,
+      requestType,
+      vipPackageId: requestType === "buy_membership" ? vipPackageId : null,
       status: "pending",
     });
 
@@ -97,7 +113,9 @@ export const createDepositRequest = async (
 
     res.status(201).json({
       success: true,
-      message: "Yêu cầu nạp tiền đã được gửi, vui lòng chuyển khoản và đợi duyệt!",
+      message: requestType === "buy_membership"
+        ? "Yêu cầu mua gói VIP đã được gửi, vui lòng chuyển khoản đúng số tiền và đợi duyệt!"
+        : "Yêu cầu nạp tiền đã được gửi, vui lòng chuyển khoản và đợi duyệt!",
       data: request,
     });
   } catch (error) {
@@ -116,6 +134,7 @@ export const getMyDepositRequests = async (
 ): Promise<void> => {
   try {
     const requests = await DepositRequest.find({ userId: req.user!.userId })
+      .populate("vipPackageId")
       .sort({ requestedAt: -1 });
 
     res.json({
@@ -137,9 +156,10 @@ export const getDepositRequests = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status, requestType, page = 1, limit = 10 } = req.query;
     const filter: any = {};
     if (status) filter.status = status;
+    if (requestType) filter.requestType = requestType;
 
     const pageNum = Number(page);
     const limitNum = Number(limit);
@@ -149,6 +169,7 @@ export const getDepositRequests = async (
       DepositRequest.find(filter)
         .populate("userId", "name email phone")
         .populate("processedBy", "name email")
+        .populate("vipPackageId")
         .sort({ requestedAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -210,32 +231,71 @@ export const approveDepositRequest = async (
       );
     }
 
-    // Cập nhật ví tiền của user
     const user = await User.findById(request.userId);
     if (!user) {
-      throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy user nạp tiền", 404);
+      throw new ServiceError("USER_NOT_FOUND", "Không tìm thấy user", 404);
     }
 
-    const bonus = request.bonusAmount || 0;
     let wallet = await Wallet.findOne({ userId: user._id });
     if (!wallet) {
       wallet = await Wallet.create({ userId: user._id, balance: 0 });
     }
-    wallet.balance += request.amount + bonus;
-    await wallet.save();
 
-    // Nếu có voucher, cập nhật trạng thái voucher
-    if (request.voucherCode) {
-      const voucher = await Voucher.findOne({
-        code: request.voucherCode.toUpperCase().trim(),
-      });
-      if (voucher) {
-        voucher.usedCount += 1;
-        if (!voucher.usedByUsers.some(id => id.toString() === user._id.toString())) {
-          voucher.usedByUsers.push(user._id.toString());
-        }
-        await voucher.save();
+    let successMsg = "";
+    if (request.requestType === "buy_membership") {
+      const vipPackage = await VipPackage.findById(request.vipPackageId);
+      if (!vipPackage) {
+        throw new ServiceError("PACKAGE_NOT_FOUND", "Không tìm thấy gói VIP liên kết với yêu cầu này", 404);
       }
+
+      // Kích hoạt/Gia hạn gói hội viên cho user
+      let membership = await UserMembership.findOne({
+        userId: user._id,
+        isActive: true,
+        expiresAt: { $gt: new Date() },
+      });
+
+      const now = new Date();
+      if (membership) {
+        if (membership.vipPackageId.toString() === vipPackage._id.toString()) {
+          membership.expiresAt = new Date(membership.expiresAt.getTime() + vipPackage.validDays * 24 * 60 * 60 * 1000);
+        } else {
+          membership.vipPackageId = vipPackage._id as any;
+          membership.activatedAt = now;
+          membership.expiresAt = new Date(now.getTime() + vipPackage.validDays * 24 * 60 * 60 * 1000);
+        }
+      } else {
+        membership = new UserMembership({
+          userId: user._id,
+          vipPackageId: vipPackage._id,
+          activatedAt: now,
+          expiresAt: new Date(now.getTime() + vipPackage.validDays * 24 * 60 * 60 * 1000),
+          isActive: true,
+        });
+      }
+      await membership.save();
+      successMsg = `Đã duyệt mua thành công gói VIP ${vipPackage.name} cho ${user.name}!`;
+    } else {
+      // Nạp tiền thường
+      const bonus = request.bonusAmount || 0;
+      wallet.balance += request.amount + bonus;
+      await wallet.save();
+
+      // Nếu có voucher, cập nhật trạng thái voucher
+      if (request.voucherCode) {
+        const voucher = await Voucher.findOne({
+          code: request.voucherCode.toUpperCase().trim(),
+        });
+        if (voucher) {
+          voucher.usedCount += 1;
+          if (!voucher.usedByUsers.some(id => id.toString() === user._id.toString())) {
+            voucher.usedByUsers.push(user._id.toString());
+          }
+          await voucher.save();
+        }
+      }
+      const bonusText = bonus > 0 ? ` (+${bonus.toLocaleString("vi-VN")} VND khuyến mãi)` : "";
+      successMsg = `Đã duyệt thành công! Cộng ${(request.amount + bonus).toLocaleString("vi-VN")} VND${bonusText} vào tài khoản của ${user.name}`;
     }
 
     // Cập nhật trạng thái yêu cầu
@@ -244,10 +304,7 @@ export const approveDepositRequest = async (
     request.processedBy = req.user!.userId as any;
     await request.save();
 
-    // Cập nhật cấp độ VIP sau khi nạp tiền thành công
-    await updateUserVipLevel(user._id.toString());
-
-    // Phát tín hiệu cập nhật ví tiền real-time qua Socket
+    // Phát tín hiệu cập nhật ví tiền & trạng thái VIP qua Socket
     socketService.emitToUser(user._id.toString(), "coins_updated", {
       balance: wallet.balance,
     });
@@ -255,10 +312,9 @@ export const approveDepositRequest = async (
       balance: wallet.balance,
     });
 
-    const bonusText = bonus > 0 ? ` (+${bonus.toLocaleString("vi-VN")} VND khuyến mãi)` : "";
     res.json({
       success: true,
-      message: `Đã duyệt thành công! Cộng ${(request.amount + bonus).toLocaleString("vi-VN")} VND${bonusText} vào tài khoản của ${user.name}`,
+      message: successMsg,
       data: request,
     });
   } catch (error) {
