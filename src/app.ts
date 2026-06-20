@@ -21,6 +21,7 @@ import { userMembershipsRoutes } from "./modules/userMemberships";
 import { forumRoutes } from "./modules/forum";
 import notificationsRoutes from "./modules/notifications/notifications.routes";
 import socialRoutes from "./modules/social/social.routes";
+import { chatRoutes } from "./modules/chat";
 import { maintenanceMiddleware } from "./middlewares/maintenance";
 import { softAuth, licenseMiddleware } from "./middlewares";
 
@@ -87,6 +88,7 @@ app.use("/api/forum", forumRoutes);
 app.use("/api/vouchers", voucherRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/social", socialRoutes);
+app.use("/api/chat", chatRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {

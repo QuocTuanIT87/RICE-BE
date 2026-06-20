@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { User } from "../auth/user.model";
 import { Friendship } from "./friendship.model";
 import { Follow } from "./follow.model";
+import { Block } from "./block.model";
 import { Post } from "../forum/post.model";
 import { Notification } from "../notifications/notification.model";
 import { socketService } from "../../services";
@@ -457,6 +458,18 @@ export const getPublicProfile = async (
     });
     const isFollowing = !!followRecord;
 
+    // Trạng thái chặn hai chiều
+    let isBlockedByMe = false;
+    let isBlockedByThem = false;
+    if (currentUserId) {
+      const [blockByMeRecord, blockByThemRecord] = await Promise.all([
+        Block.findOne({ blocker: currentUserId, blocked: targetUserId }),
+        Block.findOne({ blocker: targetUserId, blocked: currentUserId }),
+      ]);
+      isBlockedByMe = !!blockByMeRecord;
+      isBlockedByThem = !!blockByThemRecord;
+    }
+
     // 5 bài đăng gần nhất trên diễn đàn
     const recentPosts = await Post.find({ userId: targetUserId })
       .sort({ createdAt: -1 })
@@ -480,6 +493,8 @@ export const getPublicProfile = async (
         followingCount,
         friendStatus,
         isFollowing,
+        isBlockedByMe,
+        isBlockedByThem,
         recentPosts,
       },
     });
@@ -528,6 +543,108 @@ export const getFollowingList = async (
     res.json({
       success: true,
       data: follows.map((f) => f.following).filter(Boolean),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/social/block/:userId
+ * Chặn người dùng khác
+ */
+export const blockUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const blockerId = (req as any).user?.userId;
+    const { userId: blockedId } = req.params;
+
+    if (!blockerId) {
+      throw new ServiceError("UNAUTHORIZED", "Không có quyền truy cập", 401);
+    }
+    if (blockerId === blockedId) {
+      throw new ServiceError("BAD_REQUEST", "Không thể tự chặn chính mình", 400);
+    }
+
+    const targetUser = await User.findById(blockedId);
+    if (!targetUser) {
+      throw new ServiceError("NOT_FOUND", "Không tìm thấy đạo hữu này", 404);
+    }
+
+    // 1. Lưu bản ghi chặn (nếu chưa chặn)
+    const existingBlock = await Block.findOne({ blocker: blockerId, blocked: blockedId });
+    if (!existingBlock) {
+      const newBlock = new Block({ blocker: blockerId, blocked: blockedId });
+      await newBlock.save();
+    }
+
+    // Giữ nguyên bạn bè và follow (chỉ chặn nhắn tin)
+
+    res.json({
+      success: true,
+      message: "Đã chặn đạo hữu này.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/social/unblock/:userId
+ * Mở chặn người dùng khác
+ */
+export const unblockUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const blockerId = (req as any).user?.userId;
+    const { userId: blockedId } = req.params;
+
+    if (!blockerId) {
+      throw new ServiceError("UNAUTHORIZED", "Không có quyền truy cập", 401);
+    }
+
+    const result = await Block.deleteOne({ blocker: blockerId, blocked: blockedId });
+    
+    if (result.deletedCount === 0) {
+      throw new ServiceError("BAD_REQUEST", "Bạn chưa chặn đạo hữu này", 400);
+    }
+
+    res.json({
+      success: true,
+      message: "Đã mở chặn đạo hữu này.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/social/blocked
+ * Lấy danh sách những người dùng bị mình chặn
+ */
+export const getBlockedList = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const currentUserId = (req as any).user?.userId;
+    if (!currentUserId) {
+      throw new ServiceError("UNAUTHORIZED", "Không có quyền truy cập", 401);
+    }
+
+    const blocks = await Block.find({ blocker: currentUserId })
+      .populate("blocked", "name email avatar role");
+
+    res.json({
+      success: true,
+      data: blocks.map((b) => b.blocked).filter(Boolean),
     });
   } catch (error) {
     next(error);

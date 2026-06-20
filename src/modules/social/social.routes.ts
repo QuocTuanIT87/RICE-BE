@@ -11,6 +11,9 @@ import {
   getPublicProfile,
   getFollowersList,
   getFollowingList,
+  blockUser,
+  unblockUser,
+  getBlockedList,
 } from "./social.controller";
 import { auth } from "../../middlewares";
 
@@ -32,5 +35,10 @@ router.get("/following", auth, getFollowingList);
 
 // Trang cá nhân công khai
 router.get("/profile/:userId", auth, getPublicProfile);
+
+// Chặn/Mở chặn
+router.post("/block/:userId", auth, blockUser);
+router.post("/unblock/:userId", auth, unblockUser);
+router.get("/blocked", auth, getBlockedList);
 
 export default router;
