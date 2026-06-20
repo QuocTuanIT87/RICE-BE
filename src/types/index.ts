@@ -26,6 +26,9 @@ export interface IUser {
   vipAvatarFrame?: string; // Khung viền avatar VIP
   vipCoverImage?: string; // Ảnh nền trang cá nhân
   vipMascot?: string; // Thần tượng đồng hành VIP (ronaldo | messi | neymar)
+  vipWebsiteName?: string; // Tên website cá nhân VIP
+  vipWebsiteLogo?: string; // Logo website cá nhân VIP
+  vipWebsiteBanner?: string; // Banner trang chủ cá nhân VIP
   hasMembership?: boolean; // Có đang đăng ký VIP không
   membershipName?: string; // Tên gói VIP đang dùng
   membershipExpiresAt?: Date; // Ngày hết hạn gói VIP

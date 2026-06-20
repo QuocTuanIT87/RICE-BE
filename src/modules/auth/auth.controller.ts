@@ -55,6 +55,9 @@ const getMergedUser = async (user: any) => {
     vipAvatarFrame: user.vipAvatarFrame || "none",
     vipCoverImage: user.vipCoverImage || "",
     vipMascot: user.vipMascot || "ronaldo",
+    vipWebsiteName: user.vipWebsiteName || "",
+    vipWebsiteLogo: user.vipWebsiteLogo || "",
+    vipWebsiteBanner: user.vipWebsiteBanner || "",
     hasMembership: !!membership,
     membershipName: (membership?.vipPackageId as any)?.name || "",
     membershipExpiresAt: membership?.expiresAt || null,
@@ -328,8 +331,16 @@ export const updateProfile = async (
     if (phone !== undefined) user.phone = phone;
 
     // Cập nhật tùy chọn giao diện VIP (Chỉ cho phép nếu đang có gói VIP)
-    const { vipTheme, vipAvatarFrame, vipCoverImage, vipMascot } = req.body;
-    if (vipTheme || vipAvatarFrame || vipCoverImage !== undefined || vipMascot !== undefined) {
+    const { vipTheme, vipAvatarFrame, vipCoverImage, vipMascot, vipWebsiteName, vipWebsiteLogo, vipWebsiteBanner } = req.body;
+    if (
+      vipTheme ||
+      vipAvatarFrame ||
+      vipCoverImage !== undefined ||
+      vipMascot !== undefined ||
+      vipWebsiteName !== undefined ||
+      vipWebsiteLogo !== undefined ||
+      vipWebsiteBanner !== undefined
+    ) {
       const membership = await UserMembership.findOne({
         userId,
         isActive: true,
@@ -344,6 +355,9 @@ export const updateProfile = async (
       if (vipAvatarFrame) user.vipAvatarFrame = vipAvatarFrame;
       if (vipCoverImage !== undefined) user.vipCoverImage = vipCoverImage;
       if (vipMascot !== undefined) user.vipMascot = vipMascot;
+      if (vipWebsiteName !== undefined) user.vipWebsiteName = vipWebsiteName;
+      if (vipWebsiteLogo !== undefined) user.vipWebsiteLogo = vipWebsiteLogo;
+      if (vipWebsiteBanner !== undefined) user.vipWebsiteBanner = vipWebsiteBanner;
     }
 
     await user.save();
@@ -450,6 +464,100 @@ export const updateAvatar = async (
     res.json({
       success: true,
       message: "Cập nhật ảnh đại diện thành công!",
+      data: mergedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/auth/vip-logo
+ * Cập nhật logo website cá nhân VIP
+ */
+export const updateVipLogo = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!req.file) {
+      throw new ServiceError("MISSING_FILE", "Vui lòng chọn hình ảnh logo cần cập nhật", 400);
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw Errors.USER_NOT_FOUND;
+    }
+
+    // Kiểm tra VIP
+    const membership = await UserMembership.findOne({
+      userId,
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!membership) {
+      throw new ServiceError("MEMBERSHIP_REQUIRED", "Đạo hữu cần sở hữu Gói VIP để kích hoạt tính năng này", 403);
+    }
+
+    const logoUrl = await uploadToCloudinary(req.file.buffer, "rice-order/vip-logos");
+
+    user.vipWebsiteLogo = logoUrl;
+    await user.save();
+
+    const mergedUser = await getMergedUser(user);
+
+    res.json({
+      success: true,
+      message: "Cập nhật logo VIP thành công!",
+      data: mergedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/auth/vip-banner
+ * Cập nhật banner website cá nhân VIP
+ */
+export const updateVipBanner = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!req.file) {
+      throw new ServiceError("MISSING_FILE", "Vui lòng chọn hình ảnh banner cần cập nhật", 400);
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw Errors.USER_NOT_FOUND;
+    }
+
+    // Kiểm tra VIP
+    const membership = await UserMembership.findOne({
+      userId,
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!membership) {
+      throw new ServiceError("MEMBERSHIP_REQUIRED", "Đạo hữu cần sở hữu Gói VIP để kích hoạt tính năng này", 403);
+    }
+
+    const bannerUrl = await uploadToCloudinary(req.file.buffer, "rice-order/vip-banners");
+
+    user.vipWebsiteBanner = bannerUrl;
+    await user.save();
+
+    const mergedUser = await getMergedUser(user);
+
+    res.json({
+      success: true,
+      message: "Cập nhật banner VIP thành công!",
       data: mergedUser,
     });
   } catch (error) {

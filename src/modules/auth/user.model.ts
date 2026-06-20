@@ -80,6 +80,18 @@ const userSchema = new Schema<IUserDocument>(
       enum: ["ronaldo", "messi", "neymar"],
       default: "ronaldo",
     },
+    vipWebsiteName: {
+      type: String,
+      default: "",
+    },
+    vipWebsiteLogo: {
+      type: String,
+      default: "",
+    },
+    vipWebsiteBanner: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,
