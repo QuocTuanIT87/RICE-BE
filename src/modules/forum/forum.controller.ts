@@ -4,6 +4,7 @@ import { Comment } from "./comment.model";
 import { ServiceError } from "../../middlewares";
 import { User } from "../auth/user.model";
 import { UserMembership } from "../userMemberships/userMembership.model";
+import { VipCosmetics } from "../vipCosmetics/vipCosmetics.model";
 import { uploadToCloudinary, socketService } from "../../services";
 
 // Helper to fetch user membership status dynamically for list populates
@@ -15,14 +16,25 @@ const fetchVipInfoForUser = async (user: any) => {
     expiresAt: { $gt: new Date() },
   }).populate("vipPackageId");
 
+  let vipCosmetics = user.vipCosmetics;
+  if (!vipCosmetics) {
+    vipCosmetics = await VipCosmetics.findOne({ userId: user._id });
+  }
+
   return {
     _id: user._id,
     name: user.name,
     avatar: user.avatar,
     role: user.role,
-    vipTheme: user.vipTheme,
-    vipAvatarFrame: user.vipAvatarFrame,
-    vipCoverImage: user.vipCoverImage,
+    vipCosmetics: {
+      vipTheme: vipCosmetics?.vipTheme || "default",
+      vipAvatarFrame: vipCosmetics?.vipAvatarFrame || "none",
+      vipCoverImage: vipCosmetics?.vipCoverImage || "",
+      vipMascot: vipCosmetics?.vipMascot || "ronaldo",
+      vipWebsiteName: vipCosmetics?.vipWebsiteName || "",
+      vipWebsiteLogo: vipCosmetics?.vipWebsiteLogo || "",
+      vipWebsiteBanner: vipCosmetics?.vipWebsiteBanner || "",
+    },
     hasMembership: !!membership,
     membershipName: (membership?.vipPackageId as any)?.name || "",
     vipDiscountRate: (membership?.vipPackageId as any)?.discountAmount || 0,
@@ -56,7 +68,11 @@ export const getPosts = async (
 
     const [posts, total] = await Promise.all([
       Post.find(filter)
-        .populate("userId", "name avatar role vipTheme vipAvatarFrame vipCoverImage")
+        .populate({
+          path: "userId",
+          select: "name avatar role",
+          populate: { path: "vipCosmetics" },
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -101,7 +117,11 @@ export const getPostById = async (
 ): Promise<void> => {
   try {
     const post = await Post.findById(req.params.id)
-      .populate("userId", "name avatar role vipTheme vipAvatarFrame vipCoverImage");
+      .populate({
+        path: "userId",
+        select: "name avatar role",
+        populate: { path: "vipCosmetics" },
+      });
 
     if (!post) {
       throw new ServiceError("POST_NOT_FOUND", "Không tìm thấy bài viết này", 404);
@@ -114,7 +134,11 @@ export const getPostById = async (
 
     // Lấy tất cả comments
     const comments = await Comment.find({ postId: post._id })
-      .populate("userId", "name avatar role vipTheme vipAvatarFrame vipCoverImage")
+      .populate({
+        path: "userId",
+        select: "name avatar role",
+        populate: { path: "vipCosmetics" },
+      })
       .sort({ createdAt: 1 });
 
     postObj.commentsCount = comments.length;
@@ -176,7 +200,11 @@ export const createPost = async (
 
     // Populate user info for realtime socket emit
     const populatedPost = await Post.findById(newPost._id)
-      .populate("userId", "name avatar role vipTheme vipAvatarFrame vipCoverImage");
+      .populate({
+        path: "userId",
+        select: "name avatar role",
+        populate: { path: "vipCosmetics" },
+      });
     
     if (populatedPost) {
       const postObj = populatedPost.toObject();
@@ -230,7 +258,11 @@ export const createComment = async (
     await newComment.save();
 
     const populatedComment = await Comment.findById(newComment._id)
-      .populate("userId", "name avatar role vipTheme vipAvatarFrame vipCoverImage");
+      .populate({
+        path: "userId",
+        select: "name avatar role",
+        populate: { path: "vipCosmetics" },
+      });
 
     const commentObj = populatedComment!.toObject();
     if (commentObj.userId) {

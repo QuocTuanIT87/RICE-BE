@@ -8,6 +8,17 @@ import { Types } from "mongoose";
 // Vai trò người dùng trong hệ thống
 export type UserRole = "admin" | "user";
 
+export interface IVipCosmetics {
+  userId: string;
+  vipTheme: string;
+  vipAvatarFrame: string;
+  vipCoverImage: string;
+  vipMascot: string;
+  vipWebsiteName: string;
+  vipWebsiteLogo: string;
+  vipWebsiteBanner: string;
+}
+
 // Interface cho User document
 export interface IUser {
   name: string;
@@ -22,13 +33,7 @@ export interface IUser {
   otpExpiry?: Date; // Thời gian hết hạn OTP
   balance?: number; // Số dư ví tiền VND (tính từ Wallet model, gộp vào API)
   vipDiscountRate?: number; // Mức giảm giá hội viên/VIP (VND trên mỗi suất ăn hoặc % trước đây)
-  vipTheme?: string; // Chủ đề giao diện VIP
-  vipAvatarFrame?: string; // Khung viền avatar VIP
-  vipCoverImage?: string; // Ảnh nền trang cá nhân
-  vipMascot?: string; // Thần tượng đồng hành VIP (ronaldo | messi | neymar)
-  vipWebsiteName?: string; // Tên website cá nhân VIP
-  vipWebsiteLogo?: string; // Logo website cá nhân VIP
-  vipWebsiteBanner?: string; // Banner trang chủ cá nhân VIP
+  vipCosmetics?: IVipCosmetics; // Các thiết lập trang trí VIP
   hasMembership?: boolean; // Có đang đăng ký VIP không
   membershipName?: string; // Tên gói VIP đang dùng
   membershipExpiresAt?: Date; // Ngày hết hạn gói VIP

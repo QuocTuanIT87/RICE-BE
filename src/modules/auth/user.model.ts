@@ -61,43 +61,22 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       select: false,
     },
-    vipTheme: {
-      type: String,
-      enum: ["default", "gold", "dark", "sakura"],
-      default: "default",
-    },
-    vipAvatarFrame: {
-      type: String,
-      enum: ["none", "gold-crown", "neon-ring", "diamond"],
-      default: "none",
-    },
-    vipCoverImage: {
-      type: String,
-      default: "",
-    },
-    vipMascot: {
-      type: String,
-      enum: ["ronaldo", "messi", "neymar"],
-      default: "ronaldo",
-    },
-    vipWebsiteName: {
-      type: String,
-      default: "",
-    },
-    vipWebsiteLogo: {
-      type: String,
-      default: "",
-    },
-    vipWebsiteBanner: {
-      type: String,
-      default: "",
-    },
   },
   {
     timestamps: true,
     versionKey: false,
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
   },
 );
+
+// Virtual field for vipCosmetics
+userSchema.virtual("vipCosmetics", {
+  ref: "VipCosmetics",
+  localField: "_id",
+  foreignField: "userId",
+  justOne: true,
+});
 
 // Index cho tìm kiếm
 userSchema.index({ role: 1 });

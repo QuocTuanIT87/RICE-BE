@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { User, IUserDocument } from "./user.model";
 import { Wallet } from "../wallets/wallet.model";
 import { UserMembership } from "../userMemberships/userMembership.model";
+import { VipCosmetics } from "../vipCosmetics/vipCosmetics.model";
 import { env } from "../../config";
 import { ServiceError, Errors } from "../../middlewares";
 import { sendOTPEmail, uploadToCloudinary } from "../../services";
@@ -40,6 +41,9 @@ const getMergedUser = async (user: any) => {
 
   const vipDiscountRate = (membership?.vipPackageId as any)?.discountAmount || 0;
 
+  // Tìm các thiết lập trang trí VIP
+  const cosmetics = await VipCosmetics.findOne({ userId: user._id });
+
   return {
     id: user._id,
     name: user.name,
@@ -51,13 +55,15 @@ const getMergedUser = async (user: any) => {
     isBlocked: user.isBlocked,
     balance: wallet.balance,
     vipDiscountRate, // Trả về discountAmount của gói VIP để giữ tương thích ngược
-    vipTheme: user.vipTheme || "default",
-    vipAvatarFrame: user.vipAvatarFrame || "none",
-    vipCoverImage: user.vipCoverImage || "",
-    vipMascot: user.vipMascot || "ronaldo",
-    vipWebsiteName: user.vipWebsiteName || "",
-    vipWebsiteLogo: user.vipWebsiteLogo || "",
-    vipWebsiteBanner: user.vipWebsiteBanner || "",
+    vipCosmetics: {
+      vipTheme: cosmetics?.vipTheme || "default",
+      vipAvatarFrame: cosmetics?.vipAvatarFrame || "none",
+      vipCoverImage: cosmetics?.vipCoverImage || "",
+      vipMascot: cosmetics?.vipMascot || "ronaldo",
+      vipWebsiteName: cosmetics?.vipWebsiteName || "",
+      vipWebsiteLogo: cosmetics?.vipWebsiteLogo || "",
+      vipWebsiteBanner: cosmetics?.vipWebsiteBanner || "",
+    },
     hasMembership: !!membership,
     membershipName: (membership?.vipPackageId as any)?.name || "",
     membershipExpiresAt: membership?.expiresAt || null,
@@ -351,13 +357,20 @@ export const updateProfile = async (
         throw new ServiceError("MEMBERSHIP_REQUIRED", "Đạo hữu cần sở hữu Gói VIP để kích hoạt tính năng này", 403);
       }
 
-      if (vipTheme) user.vipTheme = vipTheme;
-      if (vipAvatarFrame) user.vipAvatarFrame = vipAvatarFrame;
-      if (vipCoverImage !== undefined) user.vipCoverImage = vipCoverImage;
-      if (vipMascot !== undefined) user.vipMascot = vipMascot;
-      if (vipWebsiteName !== undefined) user.vipWebsiteName = vipWebsiteName;
-      if (vipWebsiteLogo !== undefined) user.vipWebsiteLogo = vipWebsiteLogo;
-      if (vipWebsiteBanner !== undefined) user.vipWebsiteBanner = vipWebsiteBanner;
+      const vipUpdates: any = {};
+      if (vipTheme) vipUpdates.vipTheme = vipTheme;
+      if (vipAvatarFrame) vipUpdates.vipAvatarFrame = vipAvatarFrame;
+      if (vipCoverImage !== undefined) vipUpdates.vipCoverImage = vipCoverImage;
+      if (vipMascot !== undefined) vipUpdates.vipMascot = vipMascot;
+      if (vipWebsiteName !== undefined) vipUpdates.vipWebsiteName = vipWebsiteName;
+      if (vipWebsiteLogo !== undefined) vipUpdates.vipWebsiteLogo = vipWebsiteLogo;
+      if (vipWebsiteBanner !== undefined) vipUpdates.vipWebsiteBanner = vipWebsiteBanner;
+
+      await VipCosmetics.findOneAndUpdate(
+        { userId },
+        vipUpdates,
+        { upsert: true, new: true }
+      );
     }
 
     await user.save();
@@ -503,8 +516,11 @@ export const updateVipLogo = async (
 
     const logoUrl = await uploadToCloudinary(req.file.buffer, "rice-order/vip-logos");
 
-    user.vipWebsiteLogo = logoUrl;
-    await user.save();
+    await VipCosmetics.findOneAndUpdate(
+      { userId },
+      { vipWebsiteLogo: logoUrl },
+      { upsert: true, new: true }
+    );
 
     const mergedUser = await getMergedUser(user);
 
@@ -550,8 +566,11 @@ export const updateVipBanner = async (
 
     const bannerUrl = await uploadToCloudinary(req.file.buffer, "rice-order/vip-banners");
 
-    user.vipWebsiteBanner = bannerUrl;
-    await user.save();
+    await VipCosmetics.findOneAndUpdate(
+      { userId },
+      { vipWebsiteBanner: bannerUrl },
+      { upsert: true, new: true }
+    );
 
     const mergedUser = await getMergedUser(user);
 
