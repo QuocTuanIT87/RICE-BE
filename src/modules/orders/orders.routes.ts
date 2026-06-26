@@ -8,6 +8,7 @@ const router = Router();
 // User routes
 router.get("/my", auth, ordersController.getMyOrders);
 router.get("/today", auth, ordersController.getMyTodayOrder);
+router.get("/today-public", auth, ordersController.getTodayPublicOrders);
 router.post("/", auth, ordersController.createOrder);
 router.delete("/:id", auth, ordersController.deleteOrder);
 

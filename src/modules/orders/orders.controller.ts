@@ -113,6 +113,55 @@ export const getMyTodayOrder = async (
 };
 
 /**
+ * GET /api/orders/today-public
+ * Lấy danh sách đặt cơm hôm nay của toàn bộ thành viên (Thông tin công khai)
+ */
+export const getTodayPublicOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const startOfDay = getStartOfDay();
+    const endOfDay = getEndOfDay();
+    const { menuId } = req.query;
+
+    let menu;
+    if (menuId) {
+      menu = await DailyMenu.findById(menuId);
+    } else {
+      menu = await DailyMenu.findOne({
+        menuDate: { $gte: startOfDay, $lte: endOfDay },
+      });
+    }
+
+    if (!menu) {
+      res.json({
+        success: true,
+        data: [],
+      });
+      return;
+    }
+
+    const orders = await Order.find({ dailyMenuId: menu._id })
+      .populate("userId", "name avatar vipCosmetics role hasMembership")
+      .populate({
+        path: "orderItems",
+        populate: { path: "menuItemId", select: "name" },
+      })
+      .sort({ orderedAt: -1 });
+
+    res.json({
+      success: true,
+      data: orders,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/**
  * POST /api/orders
  * Đặt cơm (User)
  */
@@ -348,6 +397,7 @@ export const createOrder = async (
         orderId: existingOrder._id,
         menuId: menu._id,
       });
+      socketService.emitAll("order_placed", { menuId: menu._id });
       return;
     }
 
@@ -394,6 +444,7 @@ export const createOrder = async (
       orderId: order._id,
       menuId: menu._id,
     });
+    socketService.emitAll("order_placed", { menuId: menu._id });
   } catch (error) {
     next(error);
   }
@@ -737,6 +788,7 @@ export const deleteOrder = async (
       orderId: order._id,
       menuId: order.dailyMenuId,
     });
+    socketService.emitAll("order_placed", { menuId: order.dailyMenuId });
 
     res.json({
       success: true,
