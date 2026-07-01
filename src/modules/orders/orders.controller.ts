@@ -664,7 +664,7 @@ export const getCopyText = async (
         // Format: Tên món ×SL (ghi chú nếu có)
         let itemText = menuItem.name;
         if (item.quantity && item.quantity > 1) {
-          itemText += ` ×${item.quantity}`;
+          itemText += ` ( ${item.quantity} PHẦN)`;
         }
         if (item.note && item.note.trim()) {
           itemText += ` (${item.note.trim()})`;
