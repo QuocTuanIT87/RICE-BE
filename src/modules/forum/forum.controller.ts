@@ -1,11 +1,14 @@
 import { Request, Response, NextFunction } from "express";
 import { Post } from "./post.model";
 import { Comment } from "./comment.model";
+import { Story } from "./story.model";
 import { ServiceError } from "../../middlewares";
 import { User } from "../auth/user.model";
 import { UserMembership } from "../userMemberships/userMembership.model";
 import { VipCosmetics } from "../vipCosmetics/vipCosmetics.model";
+import { VipPackage } from "../vipPackages/vipPackage.model";
 import { uploadToCloudinary, socketService } from "../../services";
+import mongoose from "mongoose";
 
 // Helper to fetch user membership status dynamically for list populates
 const fetchVipInfoForUser = async (user: any) => {
@@ -534,6 +537,234 @@ export const reactComment = async (
       data: {
         reactions: comment.reactions,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/forum/stories
+ * Lấy danh sách stories chưa hết hạn
+ */
+export const getStories = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    let activeStories = await Story.find({ expiresAt: { $gt: new Date() } })
+      .populate("userId", "name avatar role")
+      .sort({ createdAt: -1 });
+
+    // Tự động seed story mẫu từ Mascot vào database nếu collection trống
+    if (activeStories.length === 0) {
+      console.log("🌱 Database stories trống. Tiến hành seed các tin mẫu từ Mascot...");
+      const onePackage = await VipPackage.findOne();
+      const defaultPkgId = onePackage?._id || new mongoose.Types.ObjectId();
+
+      const mascotConfigs = [
+        {
+          name: "Cristiano Ronaldo (Mascot)",
+          email: "ronaldo@webdatcom.local",
+          theme: "emerald",
+          avatar: "/ronaldo_left.png",
+          imageUrl: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop",
+          caption: "SIUUU! Cơm gà nướng mật ong trưa nay ngon nhức nách! Ăn xong muốn ra sân làm cú hat-trick ngay! 🍗⚽",
+          musicTitle: "SIUUU Energetic (Ronaldo)",
+          musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+        },
+        {
+          name: "Leo Messi (Mascot)",
+          email: "messi@webdatcom.local",
+          theme: "gold",
+          avatar: "/messi_left.png",
+          imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=600&auto=format&fit=crop",
+          caption: "Hôm nay được khao đĩa cơm sườn trứng ốp la ngon tuyệt. Xứng đáng vô địch thế giới! 🏆🥩",
+          musicTitle: "Ankara Victory (Messi)",
+          musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
+        },
+        {
+          name: "Neymar Jr (Mascot)",
+          email: "neymar@webdatcom.local",
+          theme: "sakura",
+          avatar: "/neymar_left.png",
+          imageUrl: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=600&auto=format&fit=crop",
+          caption: "Món ăn trưa rực rỡ sắc màu, chúc cả nhà văn phòng ngon miệng nha! 🌸🇧🇷",
+          musicTitle: "Samba de Janeiro (Neymar)",
+          musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+        }
+      ];
+
+      for (const config of mascotConfigs) {
+        // 1. Tạo hoặc lấy User
+        let mascotUser = await User.findOne({ email: config.email });
+        if (!mascotUser) {
+          mascotUser = new User({
+            name: config.name,
+            email: config.email,
+            password: "mascot_password_placeholder",
+            role: "user",
+            isVerified: true,
+          });
+          await mascotUser.save();
+        }
+
+        // Cập nhật avatar nếu có thay đổi
+        if (mascotUser.avatar !== config.avatar) {
+          mascotUser.avatar = config.avatar;
+          await mascotUser.save();
+        }
+
+        // 2. Tạo VipCosmetics cho user mascot
+        let vipCosmetics = await VipCosmetics.findOne({ userId: mascotUser._id });
+        if (!vipCosmetics) {
+          vipCosmetics = new VipCosmetics({
+            userId: mascotUser._id,
+            vipTheme: config.theme,
+            vipAvatarFrame: `${config.theme}-glow`,
+            vipMascot: config.name.toLowerCase().split(" ")[0],
+          });
+          await vipCosmetics.save();
+        }
+
+        // 3. Tạo UserMembership để kích hoạt hasMembership = true
+        const existingMembership = await UserMembership.findOne({ userId: mascotUser._id });
+        if (!existingMembership) {
+          const membership = new UserMembership({
+            userId: mascotUser._id,
+            vipPackageId: defaultPkgId,
+            isActive: true,
+            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Hạn dùng 1 năm
+          });
+          await membership.save();
+        }
+
+        // 4. Lưu story vào database collection stories
+        const newStory = new Story({
+          userId: mascotUser._id,
+          imageUrl: config.imageUrl,
+          caption: config.caption,
+          musicTitle: config.musicTitle,
+          musicUrl: config.musicUrl,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        });
+        await newStory.save();
+      }
+
+      // Truy vấn lại danh sách sau khi seed
+      activeStories = await Story.find({ expiresAt: { $gt: new Date() } })
+        .populate("userId", "name avatar role")
+        .sort({ createdAt: -1 });
+    }
+
+    // Populate VIP info for each story's owner
+    const storiesWithVip = await Promise.all(
+      activeStories.map(async (story) => {
+        const storyObj = story.toObject();
+        if (storyObj.userId) {
+          storyObj.userId = await fetchVipInfoForUser(storyObj.userId);
+        }
+        return storyObj;
+      })
+    );
+
+    res.json({
+      success: true,
+      data: storiesWithVip,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/forum/stories
+ * Tạo story mới (tải lên hình ảnh và text ngắn)
+ */
+export const createStory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { caption, musicTitle, musicUrl } = req.body;
+    const userId = req.user!.userId;
+
+    if (!req.file) {
+      throw new ServiceError("MISSING_FILE", "Vui lòng chọn hình ảnh để đăng tin", 400);
+    }
+
+    // Tải lên hình ảnh lên Cloudinary
+    const imageUrl = await uploadToCloudinary(req.file.buffer, "rice-order/stories");
+
+    const newStory = new Story({
+      userId,
+      imageUrl,
+      caption: caption || "",
+      musicTitle: musicTitle || "",
+      musicUrl: musicUrl || "",
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Hết hạn sau 24h
+    });
+
+    await newStory.save();
+
+    // Populate user info for realtime socket emit
+    const populatedStory = await Story.findById(newStory._id)
+      .populate({
+        path: "userId",
+        select: "name avatar role",
+        populate: { path: "vipCosmetics" },
+      });
+
+    if (populatedStory) {
+      const storyObj = populatedStory.toObject();
+      if (storyObj.userId) {
+        storyObj.userId = await fetchVipInfoForUser(storyObj.userId);
+      }
+      socketService.emitAll("forum_story_created", storyObj);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Đăng tin (Story) mới thành công!",
+      data: newStory,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/forum/stories/:id
+ * Xóa story của chính mình
+ */
+export const deleteStory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const storyId = req.params.id;
+    const userId = req.user!.userId;
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      throw new ServiceError("NOT_FOUND", "Không tìm thấy story yêu cầu", 404);
+    }
+
+    if (story.userId.toString() !== userId) {
+      throw new ServiceError("UNAUTHORIZED", "Bạn không có quyền xóa story này", 403);
+    }
+
+    await Story.deleteOne({ _id: storyId });
+
+    // Realtime emit
+    socketService.emitAll("forum_story_deleted", { _id: storyId });
+
+    res.json({
+      success: true,
+      message: "Đã xóa story thành công!",
     });
   } catch (error) {
     next(error);

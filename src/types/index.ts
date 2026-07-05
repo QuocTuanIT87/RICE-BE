@@ -235,3 +235,14 @@ export interface INotification {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+export interface IStory {
+  _id?: string;
+  userId: any;
+  imageUrl: string;
+  caption?: string;
+  musicTitle?: string;
+  musicUrl?: string;
+  createdAt?: Date;
+  expiresAt?: Date;
+}
