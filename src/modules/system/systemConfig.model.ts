@@ -14,6 +14,9 @@ export interface ISystemConfig extends Document {
   bankId: string;
   bankAccountNo: string;
   bankAccountName: string;
+  restaurantBankId?: string;
+  restaurantBankAccountNo?: string;
+  restaurantBankAccountName?: string;
 }
 
 const SystemConfigSchema: Schema = new Schema(
@@ -31,6 +34,9 @@ const SystemConfigSchema: Schema = new Schema(
     bankId: { type: String, default: "MB" },
     bankAccountNo: { type: String, default: "0999999999" },
     bankAccountName: { type: String, default: "NGUYEN VAN A" },
+    restaurantBankId: { type: String, default: "MB" },
+    restaurantBankAccountNo: { type: String, default: "0888888888" },
+    restaurantBankAccountName: { type: String, default: "CHU QUAN COM" },
   },
   { timestamps: true }
 );

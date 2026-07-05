@@ -524,6 +524,27 @@ export const getOrdersByDate = async (
       (a, b) => b.count - a.count,
     );
 
+    // Giá gốc trả cho chủ quán (nhà bếp) cố định là 30k (suất thường) và 25k (suất không cơm)
+    // Admin bán chênh lên 1k (31k và 26k) để nhận lãi
+    const priceNormal = 30000;
+    const priceNoRice = 25000;
+
+    let totalNormalMeals = 0;
+    let totalNoRiceMeals = 0;
+    for (const order of allOrders) {
+      const orderItems = (order as any).orderItems || [];
+      const orderTotalQty = orderItems.reduce(
+        (sum: number, item: any) => sum + (item.quantity || 1),
+        0,
+      );
+      if (order.orderType === "no-rice") {
+        totalNoRiceMeals += orderTotalQty;
+      } else {
+        totalNormalMeals += orderTotalQty;
+      }
+    }
+    const totalAmount = totalNormalMeals * priceNormal + totalNoRiceMeals * priceNoRice;
+
     // Phân trang danh sách orders để hiển thị
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 4;
@@ -555,6 +576,9 @@ export const getOrdersByDate = async (
           pages: Math.ceil(total / limit),
         },
         summary,
+        totalNormalMeals,
+        totalNoRiceMeals,
+        totalAmount,
       },
     });
   } catch (error) {
