@@ -822,3 +822,136 @@ export const deleteOrder = async (
     next(error);
   }
 };
+
+/**
+ * GET /api/orders/admin/unsettled-summary
+ * Lấy danh sách công nợ chưa tất toán với quán cơm (Admin)
+ */
+export const getUnsettledOrdersSummary = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const orders = await Order.find({
+      isConfirmed: true,
+      isSettledWithRestaurant: { $ne: true },
+    })
+      .populate("dailyMenuId")
+      .populate("userId", "name avatar role hasMembership")
+      .populate({
+        path: "orderItems",
+        populate: { path: "menuItemId" },
+      });
+
+    const menuGroups: {
+      [key: string]: {
+        menuId: string;
+        menuDate: Date;
+        totalOrdersCount: number;
+        totalMealsCount: number;
+        totalAmount: number;
+        orderIds: string[];
+        itemsDetail: { [menuItemId: string]: { name: string; quantity: number } };
+      };
+    } = {};
+
+    for (const order of orders) {
+      const dailyMenu = order.dailyMenuId as any;
+      if (!dailyMenu) continue;
+      const menuId = dailyMenu._id.toString();
+
+      if (!menuGroups[menuId]) {
+        menuGroups[menuId] = {
+          menuId,
+          menuDate: dailyMenu.menuDate,
+          totalOrdersCount: 0,
+          totalMealsCount: 0,
+          totalAmount: 0,
+          orderIds: [],
+          itemsDetail: {},
+        };
+      }
+
+      const orderItems = (order as any).orderItems || [];
+      const orderQty = orderItems.reduce(
+        (sum: number, item: any) => sum + (item.quantity || 1),
+        0,
+      );
+      const mealPrice = order.orderType === "no-rice" ? 25000 : 30000;
+
+      menuGroups[menuId].totalOrdersCount += 1;
+      menuGroups[menuId].totalMealsCount += orderQty;
+      menuGroups[menuId].totalAmount += orderQty * mealPrice;
+      menuGroups[menuId].orderIds.push(order._id.toString());
+
+      for (const item of orderItems) {
+        const menuItem = item.menuItemId as any;
+        if (!menuItem) continue;
+        const itemId = menuItem._id.toString();
+
+        if (!menuGroups[menuId].itemsDetail[itemId]) {
+          menuGroups[menuId].itemsDetail[itemId] = {
+            name: menuItem.name,
+            quantity: 0,
+          };
+        }
+        menuGroups[menuId].itemsDetail[itemId].quantity += item.quantity || 1;
+      }
+    }
+
+    // Convert object to sorted array (by date desc)
+    const summaryList = Object.values(menuGroups).sort(
+      (a, b) => new Date(b.menuDate).getTime() - new Date(a.menuDate).getTime(),
+    );
+
+    const config = await SystemConfig.findOne();
+
+    res.json({
+      success: true,
+      data: {
+        summary: summaryList,
+        restaurantBank: {
+          restaurantBankId: config?.restaurantBankId || "MB",
+          restaurantBankAccountNo: config?.restaurantBankAccountNo || "",
+          restaurantBankAccountName: config?.restaurantBankAccountName || "",
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/orders/admin/settle
+ * Tất toán công nợ các đơn hàng đã thanh toán với quán cơm (Admin)
+ */
+export const settleOrders = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { orderIds } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      throw new ServiceError(
+        "INVALID_INPUT",
+        "Danh sách ID đơn hàng tất toán không hợp lệ",
+        400,
+      );
+    }
+
+    await Order.updateMany(
+      { _id: { $in: orderIds } },
+      { $set: { isSettledWithRestaurant: true } },
+    );
+
+    res.json({
+      success: true,
+      message: "Tất toán công nợ với quán cơm thành công!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

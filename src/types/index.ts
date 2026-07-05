@@ -149,6 +149,7 @@ export interface IOrder {
   discountAmount?: number; // Số tiền được giảm từ voucher
   vipDiscountAmount?: number; // Số tiền được giảm từ đặc quyền VIP
   vipLevelAtOrder?: string; // Tên cấp độ VIP lúc đặt đơn
+  isSettledWithRestaurant?: boolean; // Đã tất toán với quán cơm chưa
   orderedAt: Date;
   createdAt?: Date;
   updatedAt?: Date;

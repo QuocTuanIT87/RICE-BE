@@ -54,6 +54,10 @@ const orderSchema = new Schema<IOrderDocument>(
       type: Date,
       default: Date.now,
     },
+    isSettledWithRestaurant: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
