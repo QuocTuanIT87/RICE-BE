@@ -18,6 +18,7 @@ router.patch("/profile", auth, authController.updateProfile);
 router.patch("/avatar", auth, upload.single("avatar"), authController.updateAvatar);
 router.patch("/vip-logo", auth, upload.single("logo"), authController.updateVipLogo);
 router.patch("/vip-banner", auth, upload.single("banner"), authController.updateVipBanner);
+router.patch("/vip-mascot", auth, upload.single("mascot"), authController.updateVipMascot);
 router.patch("/change-password", auth, authController.changePassword);
 
 export default router;

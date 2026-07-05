@@ -73,19 +73,33 @@ export const getPosts = async (
           select: "name avatar role",
           populate: { path: "vipCosmetics" },
         })
+        .populate({
+          path: "reactions.userId",
+          select: "name avatar role vipCosmetics",
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
       Post.countDocuments(filter),
     ]);
 
-    // Bổ sung trạng thái VIP tươi vào user object để tránh stale & tính số cmt
+    // Bổ sung trạng thái VIP tươi vào user object để tránh stale & tính số cmt & vip reactions
     const postsWithVip = await Promise.all(
       posts.map(async (post) => {
         const postObj = post.toObject();
         postObj.commentsCount = await Comment.countDocuments({ postId: post._id });
         if (postObj.userId) {
           postObj.userId = await fetchVipInfoForUser(postObj.userId);
+        }
+        if (postObj.reactions && postObj.reactions.length > 0) {
+          postObj.reactions = await Promise.all(
+            postObj.reactions.map(async (r: any) => {
+              if (r.userId) {
+                r.userId = await fetchVipInfoForUser(r.userId);
+              }
+              return r;
+            })
+          );
         }
         return postObj;
       })
@@ -121,6 +135,10 @@ export const getPostById = async (
         path: "userId",
         select: "name avatar role",
         populate: { path: "vipCosmetics" },
+      })
+      .populate({
+        path: "reactions.userId",
+        select: "name avatar role vipCosmetics",
       });
 
     if (!post) {
@@ -130,6 +148,16 @@ export const getPostById = async (
     const postObj = post.toObject();
     if (postObj.userId) {
       postObj.userId = await fetchVipInfoForUser(postObj.userId);
+    }
+    if (postObj.reactions && postObj.reactions.length > 0) {
+      postObj.reactions = await Promise.all(
+        postObj.reactions.map(async (r: any) => {
+          if (r.userId) {
+            r.userId = await fetchVipInfoForUser(r.userId);
+          }
+          return r;
+        })
+      );
     }
 
     // Lấy tất cả comments
@@ -406,11 +434,28 @@ export const reactPost = async (
 
     await post.save();
 
+    // Populate reactions.userId sau khi lưu
+    const populatedPost = await Post.findById(postId).populate({
+      path: "reactions.userId",
+      select: "name avatar role vipCosmetics",
+    });
+
+    const rawReactions = populatedPost?.reactions || [];
+    const populatedReactions = await Promise.all(
+      rawReactions.map(async (r: any) => {
+        const rObj = r.toObject ? r.toObject() : r;
+        if (rObj.userId) {
+          rObj.userId = await fetchVipInfoForUser(rObj.userId);
+        }
+        return rObj;
+      })
+    );
+
     // Realtime emit
     socketService.emitAll("forum_reaction_updated", {
       targetType: "post",
       targetId: postId,
-      reactions: post.reactions || [],
+      reactions: populatedReactions,
       likesCount: post.likes.length,
     });
 
@@ -418,7 +463,7 @@ export const reactPost = async (
       success: true,
       message,
       data: {
-        reactions: post.reactions,
+        reactions: populatedReactions,
         likesCount: post.likes.length,
       },
     });

@@ -583,3 +583,53 @@ export const updateVipBanner = async (
     next(error);
   }
 };
+
+/**
+ * PATCH /api/auth/vip-mascot
+ * Cập nhật thần tượng đồng hành VIP (VIP Mascot) tự tải lên
+ */
+export const updateVipMascot = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId;
+    if (!req.file) {
+      throw new ServiceError("MISSING_FILE", "Vui lòng chọn hình ảnh mascot cần cập nhật", 400);
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw Errors.USER_NOT_FOUND;
+    }
+
+    // Kiểm tra VIP
+    const membership = await UserMembership.findOne({
+      userId,
+      isActive: true,
+      expiresAt: { $gt: new Date() },
+    });
+    if (!membership) {
+      throw new ServiceError("MEMBERSHIP_REQUIRED", "Đạo hữu cần sở hữu Gói VIP để kích hoạt tính năng này", 403);
+    }
+
+    const mascotUrl = await uploadToCloudinary(req.file.buffer, "rice-order/vip-mascots");
+
+    await VipCosmetics.findOneAndUpdate(
+      { userId },
+      { vipMascot: mascotUrl },
+      { upsert: true, new: true }
+    );
+
+    const mergedUser = await getMergedUser(user);
+
+    res.json({
+      success: true,
+      message: "Cập nhật mascot VIP thành công!",
+      data: mergedUser,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
