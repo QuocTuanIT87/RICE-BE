@@ -15,6 +15,7 @@ const storySchema = new Schema<IStoryDocument>(
       required: true,
       default: () => new Date(Date.now() + 24 * 60 * 60 * 1000), // Mặc định hết hạn sau 24h
     },
+    views: [{ type: Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: { createdAt: true, updatedAt: false }, versionKey: false }
 );

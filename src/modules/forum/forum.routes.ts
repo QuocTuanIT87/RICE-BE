@@ -10,6 +10,7 @@ import {
   getStories,
   createStory,
   deleteStory,
+  viewStory,
 } from "./forum.controller";
 import { auth, upload } from "../../middlewares";
 
@@ -30,5 +31,6 @@ router.post("/comments/:id/react", auth, reactComment);
 router.get("/stories", auth, getStories);
 router.post("/stories", auth, upload.single("image"), createStory);
 router.delete("/stories/:id", auth, deleteStory);
+router.post("/stories/:id/view", auth, viewStory);
 
 export default router;

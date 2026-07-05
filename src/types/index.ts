@@ -243,6 +243,7 @@ export interface IStory {
   caption?: string;
   musicTitle?: string;
   musicUrl?: string;
+  views?: any[];
   createdAt?: Date;
   expiresAt?: Date;
 }

@@ -555,6 +555,11 @@ export const getStories = async (
   try {
     let activeStories = await Story.find({ expiresAt: { $gt: new Date() } })
       .populate("userId", "name avatar role")
+      .populate({
+        path: "views",
+        select: "name avatar role hasMembership vipCosmetics",
+        populate: { path: "vipCosmetics" }
+      })
       .sort({ createdAt: -1 });
 
     // Tự động seed story mẫu từ Mascot vào database nếu collection trống
@@ -655,15 +660,27 @@ export const getStories = async (
       // Truy vấn lại danh sách sau khi seed
       activeStories = await Story.find({ expiresAt: { $gt: new Date() } })
         .populate("userId", "name avatar role")
+        .populate({
+          path: "views",
+          select: "name avatar role hasMembership vipCosmetics",
+          populate: { path: "vipCosmetics" }
+        })
         .sort({ createdAt: -1 });
     }
 
-    // Populate VIP info for each story's owner
+    // Populate VIP info for each story's owner and viewers
     const storiesWithVip = await Promise.all(
       activeStories.map(async (story) => {
         const storyObj = story.toObject();
         if (storyObj.userId) {
           storyObj.userId = await fetchVipInfoForUser(storyObj.userId);
+        }
+        if (storyObj.views && Array.isArray(storyObj.views)) {
+          storyObj.views = await Promise.all(
+            storyObj.views.map(async (viewer: any) => {
+              return await fetchVipInfoForUser(viewer);
+            })
+          );
         }
         return storyObj;
       })
@@ -765,6 +782,64 @@ export const deleteStory = async (
     res.json({
       success: true,
       message: "Đã xóa story thành công!",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/forum/stories/:id/view
+ * Ghi nhận lượt xem story và phát socket realtime
+ */
+export const viewStory = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const storyId = req.params.id;
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      throw new ServiceError("UNAUTHORIZED", "Không có quyền truy cập", 401);
+    }
+
+    const story = await Story.findById(storyId);
+    if (!story) {
+      throw new ServiceError("NOT_FOUND", "Không tìm thấy story yêu cầu", 404);
+    }
+
+    // Chỉ lưu lượt xem của người khác (không phải chủ story)
+    if (story.userId.toString() !== userId) {
+      // Đảm bảo views là mảng (typescript-safe)
+      const views = ((story as any).views || []) as mongoose.Types.ObjectId[];
+      const alreadyViewed = views.some((vId) => vId.toString() === userId);
+
+      if (!alreadyViewed) {
+        const userIdObj = new mongoose.Types.ObjectId(userId);
+        (story as any).views = [...views, userIdObj];
+        await story.save();
+
+        // Lấy chi tiết user vừa xem kèm VIP để phát realtime
+        const viewerUser = await User.findById(userId).select("name avatar role hasMembership vipCosmetics");
+        let populatedViewer: any = viewerUser ? viewerUser.toObject() : null;
+        if (populatedViewer) {
+          populatedViewer = await fetchVipInfoForUser(populatedViewer);
+        }
+
+        // Phát realtime event forum_story_viewed cho các client
+        socketService.emitAll("forum_story_viewed", {
+          storyId,
+          viewer: populatedViewer,
+          viewsCount: ((story as any).views as mongoose.Types.ObjectId[]).length,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Ghi nhận lượt xem thành công",
     });
   } catch (error) {
     next(error);
