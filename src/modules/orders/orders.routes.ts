@@ -15,6 +15,7 @@ router.delete("/:id", auth, ordersController.deleteOrder);
 // Admin routes
 router.get("/by-date/:date", auth, adminOnly, ordersController.getOrdersByDate);
 router.post("/confirm-all", auth, adminOnly, ordersController.confirmAllOrders);
+router.get("/copy-text/:menuId", auth, adminOnly, ordersController.getCopyText);
 router.get("/admin/unsettled-summary", auth, adminOnly, ordersController.getUnsettledOrdersSummary);
 router.post("/admin/settle", auth, adminOnly, ordersController.settleOrders);
 
