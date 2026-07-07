@@ -850,6 +850,8 @@ export const getUnsettledOrdersSummary = async (
         menuDate: Date;
         totalOrdersCount: number;
         totalMealsCount: number;
+        totalNormalMeals: number;
+        totalNoRiceMeals: number;
         totalAmount: number;
         orderIds: string[];
         itemsDetail: { [menuItemId: string]: { name: string; quantity: number } };
@@ -867,6 +869,8 @@ export const getUnsettledOrdersSummary = async (
           menuDate: dailyMenu.menuDate,
           totalOrdersCount: 0,
           totalMealsCount: 0,
+          totalNormalMeals: 0,
+          totalNoRiceMeals: 0,
           totalAmount: 0,
           orderIds: [],
           itemsDetail: {},
@@ -884,6 +888,11 @@ export const getUnsettledOrdersSummary = async (
       menuGroups[menuId].totalMealsCount += orderQty;
       menuGroups[menuId].totalAmount += orderQty * mealPrice;
       menuGroups[menuId].orderIds.push(order._id.toString());
+      if (order.orderType === "no-rice") {
+        menuGroups[menuId].totalNoRiceMeals += orderQty;
+      } else {
+        menuGroups[menuId].totalNormalMeals += orderQty;
+      }
 
       for (const item of orderItems) {
         const menuItem = item.menuItemId as any;
